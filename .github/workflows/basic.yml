@@ -1,0 +1,250 @@
+name: 'Basic Code Quality Checks'
+
+on:
+  workflow_call:
+    secrets:
+      CHECKER_TOKEN:
+        description: 'The GITHUB_TOKEN passed from the caller'
+        required: true
+
+jobs:
+  check-code-and-quality:
+    name: 'Check Commits & Conflicts'
+    runs-on: ubuntu-latest
+    outputs:
+      commit_status: ${{ steps.commitlint_run.outputs.status }}
+      commit_summary: ${{ steps.commitlint_run.outputs.summary }}
+      commit_report: ${{ steps.commitlint_run.outputs.report }}
+      conflict_status: ${{ steps.conflict_check.outputs.status }}
+      conflict_summary: ${{ steps.conflict_check.outputs.summary }}
+    steps:
+      - name: Checkout Caller Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Checkout org-workflows Repo
+        uses: actions/checkout@v4
+        with:
+          repository: sessatakuma/org-workflows
+          path: '.org-workflows'
+          token: ${{ secrets.CHECKER_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install commitlint dependencies
+        run: |
+          if [ ! -f package.json ]; then
+            echo "Error: package.json not found"
+            exit 1
+          fi
+          npm install
+        working-directory: .org-workflows/.github/configs/commitlint/
+
+      - name: Run commitlint and set outputs
+        id: commitlint_run
+        run: |
+          set +e
+          LINT_OUTPUT=$(npx commitlint \
+            --config ../commitlint.config.js \
+            --from=${{ github.event.pull_request.base.sha }} \
+            --to=${{ github.event.pull_request.head.sha }} \
+            --verbose 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **Commit Messages:** Passed" >> $GITHUB_OUTPUT
+            echo "report=" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            SUMMARY_LINE=$(echo "$LINT_OUTPUT" | grep -i "found.*problem" | head -n 1 || echo "Format validation failed")
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "❌ **Commit Messages:** Failed. ($SUMMARY_LINE)"
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "report<<EOF" >> $GITHUB_OUTPUT
+            echo "$LINT_OUTPUT"
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+        working-directory: .org-workflows/.github/configs/commitlint/
+
+      - name: Run Conflict Check and set outputs
+        id: conflict_check
+        run: |
+          CONFLICT_FILES=$(grep -r -n -E '<<<<<<<|=======|>>>>>>>' \
+            --exclude-dir=.git \
+            --exclude-dir=.org-workflows \
+            --exclude-dir=node_modules \
+            . 2>/dev/null || true)
+          
+          if [ -n "$CONFLICT_FILES" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            FIRST_FILE=$(echo "$CONFLICT_FILES" | head -n 1 | cut -d: -f1)
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "❌ **Conflicts:** Found unresolved merge markers. (e.g., in $FIRST_FILE)"
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **Conflicts:** Passed" >> $GITHUB_OUTPUT
+          fi
+
+  check-pr-title:
+    name: 'Check PR Title Format'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.report.outputs.status }}
+      summary: ${{ steps.report.outputs.summary }}
+    steps:
+      - name: Check PR Title
+        id: title_check
+        uses: amannn/action-semantic-pull-request@v5
+        continue-on-error: true
+        with:
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: 'Subject must not start with an uppercase character.'
+        env:
+          GITHUB_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+
+      - name: Set job outputs
+        id: report
+        run: |
+          if [ "${{ steps.title_check.outcome }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **PR Title:** Passed" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **PR Title:** Failed (Format error, e.g., subject starts with uppercase)" >> $GITHUB_OUTPUT
+          fi
+
+  check-branch-name:
+    name: 'Check Branch Name'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.report.outputs.status }}
+      summary: ${{ steps.report.outputs.summary }}
+    steps:
+      - name: Check Branch Name
+        id: branch_check
+        uses: deepakputhraya/action-branch-name@master
+        continue-on-error: true
+        with:
+          regex: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\/[a-z0-9-]+$'
+          allowed_prefixes: 'dev'
+          error_message: "Branch name must be 'type/short-desc'. Ex: 'feat/new-api'"
+
+      - name: Set job outputs
+        id: report
+        run: |
+          if [ "${{ steps.branch_check.outcome }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **Branch Name:** Passed" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **Branch Name:** Failed (Must be 'type/short-desc'. Ex: 'feat/new-api')" >> $GITHUB_OUTPUT
+          fi
+
+  report-summary:
+    name: 'Report PR Quality Summary'
+    runs-on: ubuntu-latest
+    needs:
+      - check-code-and-quality
+      - check-pr-title
+      - check-branch-name
+    if: always()
+
+    steps:
+      - name: Build and Post Summary Comment
+        id: build_comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CHECKER_TOKEN }}
+          script: |
+            const outputs = {
+              commit: {
+                status: `${{ needs.check-code-and-quality.outputs.commit_status }}`,
+                summary: `${{ needs.check-code-and-quality.outputs.commit_summary }}`,
+                report: `${{ needs.check-code-and-quality.outputs.commit_report }}`
+              },
+              conflicts: {
+                status: `${{ needs.check-code-and-quality.outputs.conflict_status }}`,
+                summary: `${{ needs.check-code-and-quality.outputs.conflict_summary }}`
+              },
+              title: {
+                status: `${{ needs.check-pr-title.outputs.status }}`,
+                summary: `${{ needs.check-pr-title.outputs.summary }}`
+              },
+              branch: {
+                status: `${{ needs.check-branch-name.outputs.status }}`,
+                summary: `${{ needs.check-branch-name.outputs.summary }}`
+              }
+            };
+            
+            let all_passed = true;
+            let comment_body = "### 🛡️ PR Quality Check Summary\n\n";
+            
+            comment_body += outputs.title.summary + "\n";
+            comment_body += outputs.branch.summary + "\n";
+            comment_body += outputs.commit.summary + "\n";
+            comment_body += outputs.conflicts.summary + "\n";
+            
+            if (outputs.title.status === 'failure' || 
+                outputs.branch.status === 'failure' || 
+                outputs.commit.status === 'failure' || 
+                outputs.conflicts.status === 'failure') {
+              all_passed = false;
+            }
+
+            // 附上詳細報告
+            if (outputs.commit.status === 'failure' && outputs.commit.report) {
+              comment_body += "\n<details><summary>Click for detailed commitlint report</summary>\n\n";
+              comment_body += "```\n" + outputs.commit.report + "\n```\n";
+              comment_body += "</details>\n";
+            }
+
+            // 結論
+            if (all_passed) {
+              comment_body += "\n---\n🎉 **All checks passed!**";
+            } else {
+              comment_body += "\n---\n⚠️ **Please fix the failing checks (❌) before merging.**";
+            }
+            
+            // 尋找現有留言並更新，避免重複
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🛡️ PR Quality Check Summary')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment_body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment_body
+              });
+            }
+            
+            core.setOutput('all_passed', all_passed ? 'true' : 'false');
+
+      - name: Fail workflow if any check failed
+        if: steps.build_comment.outputs.all_passed == 'false'
+        run: |
+          echo "❌ One or more PR quality checks failed. See summary comment for details."
+          exit 1
