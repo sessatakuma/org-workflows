@@ -8,7 +8,7 @@
 這需要三個部分的修改：
 
 1.  **建立**新的可重用工作流程（`reusables-docs.yml`）並設定其輸出。
-2.  **修改**這個協同調度器檔案（`organization-quality-checks-orchestrator.yml`）來呼叫它並讀取其結果。
+2.  **修改**這個協同調度器檔案（`.github/workflows/entrypoint.yml`）來呼叫它並讀取其結果。
 3. **更新**說明文件 `README.md` 讓其它人可以知道如何使用。
 
 ### 第 1 步：建立可重用的工作流程
