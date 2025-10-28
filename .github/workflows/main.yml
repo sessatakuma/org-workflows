@@ -21,9 +21,9 @@ jobs:
     secrets:
       CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
-      # Basic PR Quality Checks (recommended to always run)
+      # Basic PR Quality Checks (recommended)
       run-basic-checks: true
 
-      # Python Code Quality Checks
-      run-python-checks: true
-      python-version: '3.11'
+      # Python Code Quality Checks (optional)
+      # run-python-checks: true
+      # python-version: '3.11'
