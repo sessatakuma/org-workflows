@@ -62,11 +62,11 @@ jobs:
             let all_passed = true;
 
             // Helper to check job status
-            const wasJobRun = (job) => job.result !== 'skipped';
+            const wasJobRun = (job) => job && job.result !== 'skipped';
 
             // --- Basic Checks ---
-            if (wasJobRun(needs.call-basic-checks)) {
-              const { outputs } = needs.call-basic-checks;
+            if (wasJobRun(needs['call-basic-checks'])) {
+              const { outputs } = needs['call-basic-checks'];
               comment_body += outputs['pr-title-summary'] + "\n";
               comment_body += outputs['branch-name-summary'] + "\n";
               comment_body += outputs['commit-messages-summary'] + "\n";
@@ -81,8 +81,8 @@ jobs:
             }
 
             // --- Python Checks ---
-            if (wasJobRun(needs.call-python-checks)) {
-              const { outputs } = needs.call-python-checks;
+            if (wasJobRun(needs['call-python-checks'])) {
+              const { outputs } = needs['call-python-checks'];
               comment_body += outputs['python-summary'] + "\n";
               if (outputs['python-status'] === 'failure') {
                 all_passed = false;
@@ -90,8 +90,8 @@ jobs:
             }
             
             // --- Detailed Reports ---
-            if (wasJobRun(needs.call-basic-checks) && needs.call-basic-checks.outputs['commit-messages-status'] === 'failure') {
-              const report = needs.call-basic-checks.outputs['commit-messages-report'];
+            if (wasJobRun(needs['call-basic-checks']) && needs['call-basic-checks'].outputs['commit-messages-status'] === 'failure') {
+              const report = needs['call-basic-checks'].outputs['commit-messages-report'];
               if (report) {
                 comment_body += `\n<details><summary>📋 Click for detailed commit validation report</summary>\n\n\`\`\`\n${report}\n\`\`\`\n\n</details>\n`;
               }
