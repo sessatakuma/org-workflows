@@ -233,21 +233,21 @@ jobs:
           script: |
             const outputs = {
               title: {
-                status: `${{ needs.check-pr-title.outputs.status }}`,
-                summary: `${{ needs.check-pr-title.outputs.summary }}`
+                status: '${{ needs.check-pr-title.outputs.status }}',
+                summary: ${{ toJSON(needs.check-pr-title.outputs.summary) }}
               },
               branch: {
-                status: `${{ needs.check-branch-name.outputs.status }}`,
-                summary: `${{ needs.check-branch-name.outputs.summary }}`
+                status: '${{ needs.check-branch-name.outputs.status }}',
+                summary: ${{ toJSON(needs.check-branch-name.outputs.summary) }}
               },
               commit: {
-                status: `${{ needs.check-commits.outputs.status }}`,
-                summary: `${{ needs.check-commits.outputs.summary }}`,
-                report: `${{ needs.check-commits.outputs.report }}`
+                status: '${{ needs.check-commits.outputs.status }}',
+                summary: ${{ toJSON(needs.check-commits.outputs.summary) }},
+                report: ${{ toJSON(needs.check-commits.outputs.report) }}
               },
               conflicts: {
-                status: `${{ needs.check-conflicts.outputs.status }}`,
-                summary: `${{ needs.check-conflicts.outputs.summary }}`
+                status: '${{ needs.check-conflicts.outputs.status }}',
+                summary: ${{ toJSON(needs.check-conflicts.outputs.summary) }}
               }
             };
             
