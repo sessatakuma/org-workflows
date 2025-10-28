@@ -52,30 +52,53 @@ jobs:
         id: check
         run: |
           set +e
+          
+          # Run commitlint and capture output
           LINT_OUTPUT=$(npx commitlint \
             --config ../commitlint.config.js \
             --from=${{ github.event.pull_request.base.sha }} \
             --to=${{ github.event.pull_request.head.sha }} \
             --verbose 2>&1)
           EXIT_CODE=$?
+          
+          # Count total commits
+          TOTAL_COMMITS=$(git log --oneline ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} | wc -l)
+          
           set -e
 
           if [ "$EXIT_CODE" -eq 0 ]; then
-            MESSAGE="✅ **Commit Messages:** All commits follow the conventional format"
+            MESSAGE="✅ **Commit Messages:** All $TOTAL_COMMITS commit(s) follow the conventional format"
             echo "$MESSAGE"
             echo "status=success" >> $GITHUB_OUTPUT
             echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
             echo "report=" >> $GITHUB_OUTPUT
           else
-            SUMMARY_LINE=$(echo "$LINT_OUTPUT" | grep -i "found.*problem" | head -n 1 || echo "Format validation failed")
-            MESSAGE="❌ **Commit Messages:** $SUMMARY_LINE"
+            # Extract error count from commitlint output
+            ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -oP '\d+(?= problems?)' | head -n 1 || echo "some")
+            
+            # Build a clean error report
+            REPORT="Expected format: \`type(scope): description\`"
+            REPORT="${REPORT}"$'\n'"Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+            REPORT="${REPORT}"$'\n'$'\n'"Failed commits:"
+            
+            # Extract failed commit info (lines starting with ⧗ or containing errors)
+            while IFS= read -r line; do
+              # Match lines with commit hash and subject
+              if echo "$line" | grep -qE "^⧗   input:"; then
+                COMMIT_MSG=$(echo "$line" | sed 's/^⧗   input: //')
+                REPORT="${REPORT}"$'\n'"- \`${COMMIT_MSG}\`"
+              elif echo "$line" | grep -qE "✖"; then
+                ERROR_MSG=$(echo "$line" | sed -E 's/^[[:space:]]*✖[[:space:]]*//' | sed 's/\[.*\]//')
+                REPORT="${REPORT}"$'\n'"  ↳ ${ERROR_MSG}"
+              fi
+            done <<< "$LINT_OUTPUT"
+            
+            MESSAGE="❌ **Commit Messages:** $ERROR_COUNT of $TOTAL_COMMITS commit(s) have invalid format"
             echo "$MESSAGE"
             echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary<<EOF" >> $GITHUB_OUTPUT
-            echo "$MESSAGE"
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
             echo "report<<EOF" >> $GITHUB_OUTPUT
-            echo "$LINT_OUTPUT"
+            echo "$REPORT"
             echo "EOF" >> $GITHUB_OUTPUT
           fi
         working-directory: .org-workflows/.github/configs/commitlint/
@@ -233,20 +256,20 @@ jobs:
           script: |
             const outputs = {
               title: {
-                status: '${{ needs.check-pr-title.outputs.status }}',
+                status: ${{ toJSON(needs.check-pr-title.outputs.status) }},
                 summary: ${{ toJSON(needs.check-pr-title.outputs.summary) }}
               },
               branch: {
-                status: '${{ needs.check-branch-name.outputs.status }}',
+                status: ${{ toJSON(needs.check-branch-name.outputs.status) }},
                 summary: ${{ toJSON(needs.check-branch-name.outputs.summary) }}
               },
               commit: {
-                status: '${{ needs.check-commits.outputs.status }}',
+                status: ${{ toJSON(needs.check-commits.outputs.status) }},
                 summary: ${{ toJSON(needs.check-commits.outputs.summary) }},
                 report: ${{ toJSON(needs.check-commits.outputs.report) }}
               },
               conflicts: {
-                status: '${{ needs.check-conflicts.outputs.status }}',
+                status: ${{ toJSON(needs.check-conflicts.outputs.status) }},
                 summary: ${{ toJSON(needs.check-conflicts.outputs.summary) }}
               }
             };
