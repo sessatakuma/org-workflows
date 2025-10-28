@@ -41,7 +41,7 @@ permissions:
   issues: write
 
 env:
-  TYPES: "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+  TYPES: "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|hotfix"
   MAX_LENGTH: 75
 
 jobs:
