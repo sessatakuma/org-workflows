@@ -10,21 +10,22 @@ on:
       - edited
       - reopened
       - synchronize
-      
-permissions:
-  contents: read
-  pull-requests: write
 ```
 
 ## Basic PR Quality Checks
 This checker will check:
-1. commit format (with commitlint)
-2. PR title format
-3. Branch format
-4. Unresolved conflicts
+1. PR title
+2. Branch name
+3. Commit messages
+4. Conflicts
 
-Use the following settings in `.github/workflows/ci.yml`:
+Use the following settings in `.github/workflows/basic.yml`:
 ```yml
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   call-basic-checks:
     name: Run Organization Basic PR Quality Checks
@@ -32,3 +33,25 @@ jobs:
     secrets:
       CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+
+## Python Code Quality Checks
+This checker will check:
+1. Code formatting (with Ruff)
+2. Code linting (with Ruff)
+3. Type checking (with Mypy)
+
+Use the following settings in `.github/workflows/python.yml`:
+```yml
+permissions:
+  contents: read
+
+jobs:
+  call-python-checks:
+    name: Run Organization Python Quality Checks
+    uses: sessatakuma/org-workflows/.github/workflows/python.yml@main
+    with:
+      # Optional: specify the Python version. Defaults to '3.11'.
+      python-version: '3.11'
+```
+

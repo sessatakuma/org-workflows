@@ -1,0 +1,80 @@
+name: 'Python Code Quality Checks'
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'The Python version to use'
+        required: false
+        type: string
+        default: '3.11'
+
+permissions:
+  contents: read
+
+jobs:
+  check-python-code:
+    name: 'Python Quality Checks (uv)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }} 
+
+      - name: Set up Python
+        id: setup_python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: 'uv'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Add uv to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install Dependencies and Linters
+        run: |
+          uv sync --dev
+          # If linters are not in pyproject.toml, use:
+          # uv sync
+          # uv pip install ruff mypy
+
+      - name: Check Ruff Formatter
+        id: ruff_format
+        continue-on-error: true
+        run: |
+          echo "Running ruff format check..."
+          uv run ruff format . --check
+
+      - name: Check Ruff Linter (with Annotations)
+        id: ruff_lint
+        continue-on-error: true
+        run: |
+          echo "Running ruff check with GitHub annotations..."
+          uv run ruff check . --output-format=github
+
+      - name: Check Mypy (with Annotations)
+        id: mypy_check
+        continue-on-error: true
+        run: |
+          echo "Running mypy with GitHub annotations..."
+          uv run mypy . --presentation=github
+
+      - name: Report failure if any check failed
+        if: failure()
+        run: |
+          echo "::error::Python code quality checks failed. See below for details."
+          if (steps.ruff_format.outcome == 'failure'); then
+            echo "- Ruff format check failed."
+          fi
+          if (steps.ruff_lint.outcome == 'failure'); then
+            echo "- Ruff lint check failed."
+          fi
+          if (steps.mypy_check.outcome == 'failure'); then
+            echo "- Mypy type check failed."
+          fi
+          echo "Please check the 'Files changed' tab for annotations."
+          exit 1
