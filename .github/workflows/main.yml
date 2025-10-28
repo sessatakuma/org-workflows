@@ -29,3 +29,7 @@ jobs:
       # Requires: pyproject.toml with ruff and mypy configured
       # run-python-checks: true
       # python-version: '3.11'
+
+      # Configuration Files Quality Checks (optional - uncomment to enable)
+      # Checks YAML, JSON, and TOML files for syntax errors
+      # run-config-checks: true

@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: '3.11'
+      run-config-checks:
+        description: 'Whether to run the configuration files quality checks.'
+        required: false
+        type: boolean
+        default: false
     secrets:
       CHECKER_TOKEN:
         description: 'The GITHUB_TOKEN passed from the caller.'
@@ -46,12 +51,20 @@ jobs:
     secrets:
       CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
 
+  call-config-checks:
+    name: Run Configuration Files Quality Checks
+    if: inputs.run-config-checks
+    uses: ./.github/workflows/reusables-config.yml
+    secrets:
+      CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+
   report-summary:
     name: Report Overall Summary
     runs-on: ubuntu-latest
     needs:
       - call-basic-checks
       - call-python-checks
+      - call-config-checks
     if: always() # This job runs even if previous jobs fail
     steps:
       - name: Build and Post Comment
@@ -110,6 +123,26 @@ jobs:
                 }
               } else {
                 comment_body += "⚠️ **Python Checks:** Completed but no outputs received\n";
+              }
+            }
+
+            // --- Config Checks ---
+            if (wasJobRun(needs['call-config-checks'])) {
+              anyJobRan = true;
+              const { outputs } = needs['call-config-checks'];
+              
+              if (outputs) {
+                comment_body += getOutput(outputs, 'yaml-summary', '⚠️ **YAML Files:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'json-summary', '⚠️ **JSON Files:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'toml-summary', '⚠️ **TOML Files:** No output received') + "\n";
+                
+                if (getOutput(outputs, 'yaml-status') === 'failure' ||
+                    getOutput(outputs, 'json-status') === 'failure' ||
+                    getOutput(outputs, 'toml-status') === 'failure') {
+                  all_passed = false;
+                }
+              } else {
+                comment_body += "⚠️ **Config Checks:** Completed but no outputs received\n";
               }
             }
             

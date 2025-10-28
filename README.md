@@ -20,3 +20,11 @@ This checker will validate:
 
 **Note:** Python checks create inline annotations on your PR for easy identification of issues.
 
+## Configuration Files Quality Checks
+This checker will validate:
+1. **YAML files** (with yamllint) - Validates syntax and style
+2. **JSON files** (with jq) - Validates JSON syntax
+3. **TOML files** (with taplo-cli) - Validates TOML syntax and formatting
+
+**Note:** Configuration checks create inline annotations for syntax errors.
+
