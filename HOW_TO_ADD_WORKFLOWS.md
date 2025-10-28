@@ -5,7 +5,7 @@
 
 假設您想新增一個「文件拼寫檢查」（Doc Linting）類別，並希望它像 `run-python-checks` 一樣可以被開啟或關閉。
 
-這需要兩個部分的修改：
+這需要三個部分的修改：
 
 1.  **建立**新的可重用工作流程（`reusables-docs.yml`）並設定其輸出。
 2.  **修改**這個協同調度器檔案（`organization-quality-checks-orchestrator.yml`）來呼叫它並讀取其結果。
