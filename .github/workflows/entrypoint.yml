@@ -32,14 +32,14 @@ jobs:
   call-basic-checks:
     name: Run Basic PR Quality Checks
     if: inputs.run-basic-checks
-    uses: ./.github/workflows/reusables/basic.yml
+    uses: ./.github/workflows/reusables-basic.yml
     secrets:
       CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
 
   call-python-checks:
     name: Run Python Quality Checks
     if: inputs.run-python-checks
-    uses: ./.github/workflows/reusables/python.yml
+    uses: ./.github/workflows/reusables-python.yml
     with:
       python-version: ${{ inputs.python-version }}
 
