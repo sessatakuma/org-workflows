@@ -1,8 +1,8 @@
-name: Basic PR Quality Checks
+name: PR Quality Checks
 
 on:
   pull_request:
-    branches: [ "main", "dev" ]
+    branches: [ "main" ]
     types:
       - opened
       - edited
