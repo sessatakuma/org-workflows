@@ -1,11 +1,16 @@
 # Sessatakuma CI workflows
 ```yml
-name: XXXXX
+name: PR Checks
 
 on:
   pull_request:
     branches: [ "main", "dev" ]
-
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      
 permissions:
   contents: read
   pull-requests: write

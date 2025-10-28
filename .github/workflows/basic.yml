@@ -7,16 +7,19 @@ on:
         description: 'The GITHUB_TOKEN passed from the caller'
         required: true
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
-  check-code-and-quality:
-    name: 'Check Commits & Conflicts'
+  check-commits:
+    name: 'Check Commit Messages'
     runs-on: ubuntu-latest
     outputs:
-      commit_status: ${{ steps.commitlint_run.outputs.status }}
-      commit_summary: ${{ steps.commitlint_run.outputs.summary }}
-      commit_report: ${{ steps.commitlint_run.outputs.report }}
-      conflict_status: ${{ steps.conflict_check.outputs.status }}
-      conflict_summary: ${{ steps.conflict_check.outputs.summary }}
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
+      report: ${{ steps.check.outputs.report }}
     steps:
       - name: Checkout Caller Code
         uses: actions/checkout@v4
@@ -39,14 +42,14 @@ jobs:
       - name: Install commitlint dependencies
         run: |
           if [ ! -f package.json ]; then
-            echo "Error: package.json not found"
+            echo "❌ Error: package.json not found"
             exit 1
           fi
           npm install
         working-directory: .org-workflows/.github/configs/commitlint/
 
-      - name: Run commitlint and set outputs
-        id: commitlint_run
+      - name: Run commitlint
+        id: check
         run: |
           set +e
           LINT_OUTPUT=$(npx commitlint \
@@ -58,14 +61,18 @@ jobs:
           set -e
 
           if [ "$EXIT_CODE" -eq 0 ]; then
+            MESSAGE="✅ **Commit Messages:** All commits follow the conventional format"
+            echo "$MESSAGE"
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Commit Messages:** Passed" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
             echo "report=" >> $GITHUB_OUTPUT
           else
-            echo "status=failure" >> $GITHUB_OUTPUT
             SUMMARY_LINE=$(echo "$LINT_OUTPUT" | grep -i "found.*problem" | head -n 1 || echo "Format validation failed")
+            MESSAGE="❌ **Commit Messages:** $SUMMARY_LINE"
+            echo "$MESSAGE"
+            echo "status=failure" >> $GITHUB_OUTPUT
             echo "summary<<EOF" >> $GITHUB_OUTPUT
-            echo "❌ **Commit Messages:** Failed. ($SUMMARY_LINE)"
+            echo "$MESSAGE"
             echo "EOF" >> $GITHUB_OUTPUT
             echo "report<<EOF" >> $GITHUB_OUTPUT
             echo "$LINT_OUTPUT"
@@ -73,107 +80,158 @@ jobs:
           fi
         working-directory: .org-workflows/.github/configs/commitlint/
 
-      - name: Run Conflict Check and set outputs
-        id: conflict_check
+  check-conflicts:
+    name: 'Check Merge Conflicts'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Check for conflict markers
+        id: check
         run: |
           CONFLICT_FILES=$(grep -r -n -E '<<<<<<<|=======|>>>>>>>' \
             --exclude-dir=.git \
-            --exclude-dir=.org-workflows \
             --exclude-dir=node_modules \
             . 2>/dev/null || true)
           
           if [ -n "$CONFLICT_FILES" ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
             FIRST_FILE=$(echo "$CONFLICT_FILES" | head -n 1 | cut -d: -f1)
+            FILE_COUNT=$(echo "$CONFLICT_FILES" | cut -d: -f1 | sort -u | wc -l)
+            MESSAGE="❌ **Conflicts:** Found unresolved merge markers in $FILE_COUNT file(s) (e.g., \`$FIRST_FILE\`)"
+            echo "$MESSAGE"
+            echo "status=failure" >> $GITHUB_OUTPUT
             echo "summary<<EOF" >> $GITHUB_OUTPUT
-            echo "❌ **Conflicts:** Found unresolved merge markers. (e.g., in $FIRST_FILE)"
+            echo "$MESSAGE"
             echo "EOF" >> $GITHUB_OUTPUT
           else
+            MESSAGE="✅ **Conflicts:** No merge conflict markers found"
+            echo "$MESSAGE"
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Conflicts:** Passed" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
           fi
 
   check-pr-title:
-    name: 'Check PR Title Format'
+    name: 'Check PR Title'
     runs-on: ubuntu-latest
     outputs:
-      status: ${{ steps.report.outputs.status }}
-      summary: ${{ steps.report.outputs.summary }}
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
     steps:
-      - name: Check PR Title
-        id: title_check
-        uses: amannn/action-semantic-pull-request@v5
-        continue-on-error: true
-        with:
-          subjectPattern: ^(?![A-Z]).+$
-          subjectPatternError: 'Subject must not start with an uppercase character.'
-        env:
-          GITHUB_TOKEN: ${{ secrets.CHECKER_TOKEN }}
-
-      - name: Set job outputs
-        id: report
+      - name: Check PR Title Format
+        id: check
         run: |
-          if [ "${{ steps.title_check.outcome }}" = "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **PR Title:** Passed" >> $GITHUB_OUTPUT
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          # Conventional commit types
+          TYPES="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+          
+          # Regex: type(optional-scope): description
+          # Examples: "feat: add feature", "fix(api): bug fix", "docs: update readme"
+          REGEX="^($TYPES)(\(.+\))?:\s.+"
+          
+          if [[ "$PR_TITLE" =~ $REGEX ]]; then
+            # Check that description starts with lowercase
+            DESC=$(echo "$PR_TITLE" | sed -E "s/^($TYPES)(\(.+\))?:\s+//")
+            if [[ "$DESC" =~ ^[a-z] ]]; then
+              MESSAGE="✅ **PR Title:** Follows conventional format (\`$PR_TITLE\`)"
+              echo "$MESSAGE"
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
+            else
+              MESSAGE="❌ **PR Title:** Description should start with lowercase. Current: \`$PR_TITLE\`. Expected: \`type: description\` (e.g., \`feat: add new feature\`)"
+              echo "$MESSAGE"
+              echo "status=failure" >> $GITHUB_OUTPUT
+              echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
+            fi
           else
+            # Provide detailed error messages
+            if [[ ! "$PR_TITLE" =~ : ]]; then
+              ERROR_DETAIL="Missing ':' separator"
+            elif [[ ! "$PR_TITLE" =~ ^($TYPES) ]]; then
+              ERROR_DETAIL="Invalid or missing type prefix"
+            elif [[ "$PR_TITLE" =~ ^($TYPES)(\(.+\))?:[[:space:]]*$ ]]; then
+              ERROR_DETAIL="Missing description after ':'"
+            else
+              ERROR_DETAIL="Invalid format"
+            fi
+            
+            MESSAGE="❌ **PR Title:** $ERROR_DETAIL. Current: \`$PR_TITLE\`. Expected: \`type: description\` (e.g., \`feat: add new feature\`)"
+            echo "$MESSAGE"
             echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **PR Title:** Failed (Format error, e.g., subject starts with uppercase)" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
           fi
 
   check-branch-name:
     name: 'Check Branch Name'
     runs-on: ubuntu-latest
     outputs:
-      status: ${{ steps.report.outputs.status }}
-      summary: ${{ steps.report.outputs.summary }}
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
     steps:
-      - name: Check Branch Name
-        id: branch_check
-        uses: deepakputhraya/action-branch-name@master
-        continue-on-error: true
-        with:
-          regex: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\/[a-z0-9-]+$'
-          allowed_prefixes: 'dev'
-          error_message: "Branch name must be 'type/short-desc'. Ex: 'feat/new-api'"
-
-      - name: Set job outputs
-        id: report
+      - name: Check Branch Name Format
+        id: check
         run: |
-          if [ "${{ steps.branch_check.outcome }}" = "success" ]; then
+          BRANCH_NAME="${{ github.head_ref }}"
+          REGEX='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\/[a-z0-9-]+$'
+          
+          # Special branch names that are always valid
+          if [[ "$BRANCH_NAME" = "dev" ]]; then
+            MESSAGE="✅ **Branch Name:** Valid special branch (\`$BRANCH_NAME\`)"
+            echo "$MESSAGE"
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Branch Name:** Passed" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check against the regex
+          if [[ "$BRANCH_NAME" =~ $REGEX ]]; then
+            MESSAGE="✅ **Branch Name:** Follows naming convention (\`$BRANCH_NAME\`)"
+            echo "$MESSAGE"
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
           else
+            # Provide specific feedback
+            if [[ ! "$BRANCH_NAME" =~ / ]]; then
+              ERROR_DETAIL="Missing '/' separator"
+            elif [[ "$BRANCH_NAME" =~ ^[A-Z] ]]; then
+              ERROR_DETAIL="Should not start with uppercase"
+            elif [[ ! "$BRANCH_NAME" =~ ^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\/ ]]; then
+              ERROR_DETAIL="Invalid type prefix"
+            elif [[ "$BRANCH_NAME" =~ [A-Z] ]]; then
+              ERROR_DETAIL="Should not contain uppercase letters"
+            else
+              ERROR_DETAIL="Invalid format"
+            fi
+            
+            MESSAGE="❌ **Branch Name:** $ERROR_DETAIL. Current: \`$BRANCH_NAME\`. Expected: \`type/description\` (e.g., \`feat/new-api\`)"
+            echo "$MESSAGE"
             echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **Branch Name:** Failed (Must be 'type/short-desc'. Ex: 'feat/new-api')" >> $GITHUB_OUTPUT
+            echo "summary=$MESSAGE" >> $GITHUB_OUTPUT
           fi
 
   report-summary:
-    name: 'Report PR Quality Summary'
+    name: 'Report Summary'
     runs-on: ubuntu-latest
     needs:
-      - check-code-and-quality
+      - check-commits
+      - check-conflicts
       - check-pr-title
       - check-branch-name
     if: always()
-
     steps:
-      - name: Build and Post Summary Comment
+      - name: Build and Post Comment
         id: build_comment
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.CHECKER_TOKEN }}
           script: |
             const outputs = {
-              commit: {
-                status: `${{ needs.check-code-and-quality.outputs.commit_status }}`,
-                summary: `${{ needs.check-code-and-quality.outputs.commit_summary }}`,
-                report: `${{ needs.check-code-and-quality.outputs.commit_report }}`
-              },
-              conflicts: {
-                status: `${{ needs.check-code-and-quality.outputs.conflict_status }}`,
-                summary: `${{ needs.check-code-and-quality.outputs.conflict_summary }}`
-              },
               title: {
                 status: `${{ needs.check-pr-title.outputs.status }}`,
                 summary: `${{ needs.check-pr-title.outputs.summary }}`
@@ -181,17 +239,28 @@ jobs:
               branch: {
                 status: `${{ needs.check-branch-name.outputs.status }}`,
                 summary: `${{ needs.check-branch-name.outputs.summary }}`
+              },
+              commit: {
+                status: `${{ needs.check-commits.outputs.status }}`,
+                summary: `${{ needs.check-commits.outputs.summary }}`,
+                report: `${{ needs.check-commits.outputs.report }}`
+              },
+              conflicts: {
+                status: `${{ needs.check-conflicts.outputs.status }}`,
+                summary: `${{ needs.check-conflicts.outputs.summary }}`
               }
             };
             
             let all_passed = true;
             let comment_body = "### 🛡️ PR Quality Check Summary\n\n";
             
+            // Display the check results in order (using the summary generated by each job)
             comment_body += outputs.title.summary + "\n";
             comment_body += outputs.branch.summary + "\n";
             comment_body += outputs.commit.summary + "\n";
             comment_body += outputs.conflicts.summary + "\n";
             
+            // Determine overall pass/fail
             if (outputs.title.status === 'failure' || 
                 outputs.branch.status === 'failure' || 
                 outputs.commit.status === 'failure' || 
@@ -199,21 +268,21 @@ jobs:
               all_passed = false;
             }
 
-            // 附上詳細報告
+            // If commitlint failed, add detailed report in a collapsible section
             if (outputs.commit.status === 'failure' && outputs.commit.report) {
-              comment_body += "\n<details><summary>Click for detailed commitlint report</summary>\n\n";
+              comment_body += "\n<details><summary>📋 Click for detailed commitlint report</summary>\n\n";
               comment_body += "```\n" + outputs.commit.report + "\n```\n";
               comment_body += "</details>\n";
             }
 
-            // 結論
+            // Final overall status message
             if (all_passed) {
-              comment_body += "\n---\n🎉 **All checks passed!**";
+              comment_body += "\n---\n🎉 **All checks passed!** Ready to merge.";
             } else {
               comment_body += "\n---\n⚠️ **Please fix the failing checks (❌) before merging.**";
             }
             
-            // 尋找現有留言並更新，避免重複
+            // Find existing comment and update to avoid duplication
             const comments = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -232,6 +301,7 @@ jobs:
                 repo: context.repo.repo,
                 body: comment_body
               });
+              console.log('✅ Updated existing comment');
             } else {
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
@@ -239,6 +309,7 @@ jobs:
                 repo: context.repo.repo,
                 body: comment_body
               });
+              console.log('✅ Created new comment');
             }
             
             core.setOutput('all_passed', all_passed ? 'true' : 'false');
