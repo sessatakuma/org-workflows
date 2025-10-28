@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   check-python-code:
-    name: 'Python Quality Checks (uv)'
+    name: 'Python Quality Checks'
     runs-on: ubuntu-latest
     outputs:
       summary: ${{ steps.outcome.outputs.summary }}
@@ -76,6 +76,10 @@ jobs:
           set +e  # Don't exit on mypy failure
           uv run mypy . > mypy_output.txt 2>&1
           MYPY_EXIT_CODE=$?
+
+          if [ -f mypy_output.txt ]; then
+            sed -i -E 's/^([^:]+:[0-9]+):[[:space:]]+(error|warning|note):/\1:: \2:/' mypy_output.txt
+          fi
           
           # Parse mypy output and generate GitHub annotations
           if [ -f mypy_output.txt ]; then
