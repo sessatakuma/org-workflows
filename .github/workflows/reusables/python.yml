@@ -8,6 +8,13 @@ on:
         required: false
         type: string
         default: '3.11'
+    outputs:
+      python-summary:
+        description: "A summary of the Python code quality checks."
+        value: ${{ jobs.check-python-code.outputs.summary }}
+      python-status:
+        description: "The overall status of the Python checks."
+        value: ${{ jobs.check-python-code.outputs.status }}
 
 permissions:
   contents: read
@@ -16,6 +23,9 @@ jobs:
   check-python-code:
     name: 'Python Quality Checks (uv)'
     runs-on: ubuntu-latest
+    outputs:
+      summary: ${{ steps.outcome.outputs.summary }}
+      status: ${{ steps.outcome.outputs.status }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -27,7 +37,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-          cache: 'uv'
+          cache: 'pip'
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -63,18 +73,14 @@ jobs:
           echo "Running mypy with GitHub annotations..."
           uv run mypy . --presentation=github
 
-      - name: Report failure if any check failed
-        if: failure()
+      - name: Set Python Checks Outcome
+        id: outcome
+        if: always()
         run: |
-          echo "::error::Python code quality checks failed. See below for details."
-          if (steps.ruff_format.outcome == 'failure'); then
-            echo "- Ruff format check failed."
+          if [[ "${{ steps.ruff_format.outcome }}" == "failure" || "${{ steps.ruff_lint.outcome }}" == "failure" || "${{ steps.mypy_check.outcome }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **Python Quality:** Checks failed (see annotations for details)." >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **Python Quality:** All checks passed." >> $GITHUB_OUTPUT
           fi
-          if (steps.ruff_lint.outcome == 'failure'); then
-            echo "- Ruff lint check failed."
-          fi
-          if (steps.mypy_check.outcome == 'failure'); then
-            echo "- Mypy type check failed."
-          fi
-          echo "Please check the 'Files changed' tab for annotations."
-          exit 1

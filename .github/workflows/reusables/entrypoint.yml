@@ -1,0 +1,140 @@
+name: 'Organization Quality Checks Orchestrator'
+
+on:
+  workflow_call:
+    inputs:
+      run-basic-checks:
+        description: 'Whether to run the basic PR quality checks.'
+        required: false
+        type: boolean
+        default: true
+      run-python-checks:
+        description: 'Whether to run the Python code quality checks.'
+        required: false
+        type: boolean
+        default: false
+      python-version:
+        description: 'The Python version to use for the Python checks.'
+        required: false
+        type: string
+        default: '3.11'
+    secrets:
+      CHECKER_TOKEN:
+        description: 'The GITHUB_TOKEN passed from the caller.'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  call-basic-checks:
+    name: Run Basic PR Quality Checks
+    if: inputs.run-basic-checks
+    uses: ./.github/workflows/reusables/basic.yml
+    secrets:
+      CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+
+  call-python-checks:
+    name: Run Python Quality Checks
+    if: inputs.run-python-checks
+    uses: ./.github/workflows/reusables/python.yml
+    with:
+      python-version: ${{ inputs.python-version }}
+
+  report-summary:
+    name: Report Overall Summary
+    runs-on: ubuntu-latest
+    needs:
+      - call-basic-checks
+      - call-python-checks
+    if: always() # This job runs even if previous jobs fail
+    steps:
+      - name: Build and Post Comment
+        id: build_comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CHECKER_TOKEN }}
+          script: |
+            const { needs } = context;
+            let comment_body = "### 🛡️ PR Quality Check Summary\n\n";
+            let all_passed = true;
+
+            // Helper to check job status
+            const wasJobRun = (job) => job.result !== 'skipped';
+
+            // --- Basic Checks ---
+            if (wasJobRun(needs.call-basic-checks)) {
+              const { outputs } = needs.call-basic-checks;
+              comment_body += outputs['pr-title-summary'] + "\n";
+              comment_body += outputs['branch-name-summary'] + "\n";
+              comment_body += outputs['commit-messages-summary'] + "\n";
+              comment_body += outputs['conflicts-summary'] + "\n";
+              
+              if (outputs['pr-title-status'] === 'failure' ||
+                  outputs['branch-name-status'] === 'failure' ||
+                  outputs['commit-messages-status'] === 'failure' ||
+                  outputs['conflicts-status'] === 'failure') {
+                all_passed = false;
+              }
+            }
+
+            // --- Python Checks ---
+            if (wasJobRun(needs.call-python-checks)) {
+              const { outputs } = needs.call-python-checks;
+              comment_body += outputs['python-summary'] + "\n";
+              if (outputs['python-status'] === 'failure') {
+                all_passed = false;
+              }
+            }
+            
+            // --- Detailed Reports ---
+            if (wasJobRun(needs.call-basic-checks) && needs.call-basic-checks.outputs['commit-messages-status'] === 'failure') {
+              const report = needs.call-basic-checks.outputs['commit-messages-report'];
+              if (report) {
+                comment_body += `\n<details><summary>📋 Click for detailed commit validation report</summary>\n\n\`\`\`\n${report}\n\`\`\`\n\n</details>\n`;
+              }
+            }
+            
+            // --- Final Status ---
+            comment_body += "\n---\n";
+            if (all_passed) {
+              comment_body += "🎉 **All checks passed!**";
+            } else {
+              comment_body += "⚠️ **Please fix the failing checks (❌) before merging.**";
+            }
+
+            // --- Update or Create Comment ---
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('🛡️ PR Quality Check Summary')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment_body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment_body
+              });
+            }
+            
+            core.setOutput('all_passed', all_passed);
+
+      - name: Fail workflow if any check failed
+        if: steps.build_comment.outputs.all_passed == 'false'
+        run: |
+          echo "❌ One or more PR quality checks failed. See summary comment for details."
+          exit 1

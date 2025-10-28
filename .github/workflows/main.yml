@@ -15,8 +15,15 @@ permissions:
   issues: write
 
 jobs:
-  call-basic-checks:
-    name: Run Organization Basic PR Quality Checks
-    uses: sessatakuma/org-workflows/.github/workflows/basic.yml@main
+  quality-checks:
+    name: Run Organization Quality Checks
+    uses: ./.github/workflows/reusables/entrypoint.yml
     secrets:
       CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      # Basic PR Quality Checks (recommended to always run)
+      run-basic-checks: true
+
+      # Python Code Quality Checks
+      run-python-checks: true
+      python-version: '3.11'
