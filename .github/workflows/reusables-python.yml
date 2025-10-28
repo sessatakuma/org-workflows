@@ -37,8 +37,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-          cache: 'pip'
-
+          
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -48,30 +47,27 @@ jobs:
       - name: Install Dependencies and Linters
         run: |
           uv sync --dev
-          # If linters are not in pyproject.toml, use:
-          # uv sync
-          # uv pip install ruff mypy
-
+          
       - name: Check Ruff Formatter
         id: ruff_format
         continue-on-error: true
         run: |
           echo "Running ruff format check..."
-          uv run ruff format . --check
+          ruff format . --check --output-format=github
 
       - name: Check Ruff Linter (with Annotations)
         id: ruff_lint
         continue-on-error: true
         run: |
           echo "Running ruff check with GitHub annotations..."
-          uv run ruff check . --output-format=github
+          ruff check . --output-format=github
 
       - name: Check Mypy (with Annotations)
         id: mypy_check
         continue-on-error: true
         run: |
           echo "Running mypy with GitHub annotations..."
-          uv run mypy . --presentation=github
+          mypy .
 
       - name: Set Python Checks Outcome
         id: outcome
