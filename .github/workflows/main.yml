@@ -21,9 +21,10 @@ jobs:
     secrets:
       CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
-      # Basic PR Quality Checks (recommended)
+      # Basic PR Quality Checks (enabled by default)
       run-basic-checks: true
 
-      # Python Code Quality Checks (optional)
+      # Python Code Quality Checks (optional - uncomment to enable)
+      # Requires: pyproject.toml with ruff and mypy configured
       # run-python-checks: true
       # python-version: '3.11'
