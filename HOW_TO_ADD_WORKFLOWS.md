@@ -7,7 +7,7 @@
 
 這需要三個部分的修改：
 
-1.  **建立**新的可重用工作流程（`reusables-docs.yml`）並設定其輸出。
+1.  **建立**新的可重用工作流程（`.github/workflows/reusables-docs.yml`）並設定其輸出。
 2.  **修改**這個協同調度器檔案（`.github/workflows/entrypoint.yml`）來呼叫它並讀取其結果。
 3. **更新**說明文件 `README.md` 讓其它人可以知道如何使用。
 
@@ -87,7 +87,7 @@ jobs:
 
 ### 第 2 步：修改協同調度器
 
-現在您有了一個 `reusables-docs.yml`，您需要讓這個協同調度器檔案去呼叫它。
+現在您有了一個 `.github/workflows/reusables-docs.yml`，您需要讓這個協同調度器檔案去呼叫它。
 
 **1. 新增一個 `input` 來控制它：**
 
