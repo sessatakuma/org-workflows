@@ -1,18 +1,28 @@
 # Sessatakuma Quality Checking Workflows
 This is a repository with our shared workflows.
 
+
+## Arguments
 To use this to check code before PR, please refer to [sample caller](.github/workflows/main.yml).
 
-We have implemented the following checkers:
+To apply workflows, please set the following arguments in `with` section:
 
-## Basic PR Quality Checks
+| Input | Description | Type | Default |
+| :--- | :--- | :--- | :--- |
+| `run-basic-checks` | Whether to run the basic PR quality checks. | `boolean` | `true` |
+| `run-python-checks` | Whether to run the Python code quality checks. | `boolean` | `false` |
+| `python-version` | The Python version to use for the Python checks. | `string` | `'3.11'` |
+| `run-config-checks` | Whether to run the configuration files quality checks. | `boolean` | `false` |
+
+## Checking details
+### Basic PR Quality Checks
 This checker will validate:
 1. **PR title** - Conventional commit format, length, and case
 2. **Branch name** - Type-based naming convention
 3. **Commit messages** - Format, length, and case with detailed reports
 4. **Conflicts** - Detects unresolved merge conflict markers
 
-## Python Code Quality Checks
+### Python Code Quality Checks
 This checker will validate:
 1. **Code formatting** (with Ruff) - Ensures consistent code style
 2. **Code linting** (with Ruff) - Catches common errors and issues
@@ -20,7 +30,7 @@ This checker will validate:
 
 **Note:** Python checks create inline annotations on your PR for easy identification of issues.
 
-## Configuration Files Quality Checks
+### Configuration Files Quality Checks
 This checker will validate:
 1. **YAML files** (with yamllint) - Validates syntax and style
 2. **JSON files** (with jq) - Validates JSON syntax
