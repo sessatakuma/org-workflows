@@ -165,6 +165,7 @@ jobs:
           CONFLICT_FILES=$(grep -r -n -E '<<<<<<<|=======|>>>>>>>' \
             --exclude-dir=.git \
             --exclude-dir=node_modules \
+            --exclude-dir=./.github/workflows/reusables-basic.yml \
             . 2>/dev/null || true)
 
           # If conflict markers were found...
