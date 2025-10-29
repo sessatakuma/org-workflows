@@ -65,7 +65,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          REGEX="^(${{ env.TYPES }})(\(.+\))?:\s.+"
+          REGEX="^(${{ env.TYPES }})(\(.+\))?(!?):\s.+"
           # Get all commits between the base and head of the PR
           COMMITS=$(git log --format="%H:::%s" "$BASE_SHA".."$HEAD_SHA")
 
