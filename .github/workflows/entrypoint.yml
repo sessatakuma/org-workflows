@@ -177,23 +177,25 @@ jobs:
                 comment.user.type === 'Bot' && comment.body.includes('🛡️ PR Quality Check Summary')
               );
               
+              // 1. 如果找到舊留言，就刪除它
               if (botComment) {
-                await github.rest.issues.updateComment({
+                await github.rest.issues.deleteComment({
                   comment_id: botComment.id,
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  body: comment_body
                 });
-                console.log(`✅ Updated existing comment #${botComment.id}`);
-              } else {
-                await github.rest.issues.createComment({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: comment_body
-                });
-                console.log('✅ Created new comment');
+                console.log(`✅ Deleted existing comment #${botComment.id}`);
               }
+
+              // 2. 無論如何，都在最底下建立一則新留言
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment_body
+              });
+              console.log('✅ Created new comment at the bottom');
+
             } catch (error) {
               core.setFailed(`Failed to post comment: ${error.message}`);
               console.error('Comment body that failed to post:', comment_body);
