@@ -162,9 +162,11 @@ jobs:
           # Search for conflict markers recursively in the current directory.
           # Exclude common directories like .git and node_modules.
           # The '|| true' prevents the script from exiting if grep finds no matches.
-          CONFLICT_FILES=$(grep -r -n -E '<<<<<<<|=======|>>>>>>>' \
+          CONFLICT_FILES=$(grep -r -n -E '^(<<<<<<<|=======|>>>>>>>)' \
             --exclude-dir=.git \
             --exclude-dir=node_modules \
+            --exclude-dir=dist \
+            --exclude-dir=build \
             --exclude=reusables-basic.yml \
             . 2>/dev/null || true)
 
