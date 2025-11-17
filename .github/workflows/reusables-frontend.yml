@@ -1,0 +1,162 @@
+name: 'Frontend Code Quality Checks'
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'The Node.js version to use'
+        required: false
+        type: string
+        default: '20'
+    secrets:
+      CHECKER_TOKEN:
+        description: 'The GITHUB_TOKEN passed from the caller'
+        required: true
+    outputs:
+      frontend-summary:
+        description: "A summary of the Frontend code quality checks."
+        value: ${{ jobs.check-frontend-code.outputs.summary }}
+      frontend-status:
+        description: "The overall status of the Frontend checks."
+        value: ${{ jobs.check-frontend-code.outputs.status }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  check-frontend-code:
+    name: 'Frontend Quality Checks'
+    runs-on: ubuntu-latest
+    outputs:
+      summary: ${{ steps.outcome.outputs.summary }}
+      status: ${{ steps.outcome.outputs.status }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }} 
+
+      - name: Set up Node.js
+        id: setup_node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          
+      - name: Install Dependencies
+        run: |
+          npm ci
+            
+      - name: Check Prettier Formatter
+        id: prettier_format
+        continue-on-error: true
+        run: |
+          echo "Running prettier format check..."
+          npx prettier --check . || {
+            echo "Prettier formatting issues found. Run 'npm run format' to fix them."
+            # Get list of files that need formatting
+            npx prettier --check . --list-different > prettier_output.txt 2>&1 || true
+            
+            # Generate GitHub annotations for formatting issues
+            if [ -f prettier_output.txt ]; then
+              while IFS= read -r file; do
+                if [ -n "$file" ] && [ -f "$file" ]; then
+                  echo "::error title=Prettier Formatting,file=${file}::${file}: File needs formatting. Run 'npm run format' to fix."
+                fi
+              done < prettier_output.txt
+            fi
+            exit 1
+          }
+
+      - name: Check ESLint (with Annotations)
+        id: eslint_check
+        continue-on-error: true
+        run: |
+          echo "Running ESLint with GitHub annotations..."
+          set +e  # Don't exit on ESLint failure
+          npx eslint . --format json --output-file eslint_output.json
+          ESLINT_EXIT_CODE=$?
+
+          # Parse ESLint JSON output and generate GitHub annotations
+          if [ -f eslint_output.json ]; then
+            node -e "
+              const fs = require('fs');
+              const results = JSON.parse(fs.readFileSync('eslint_output.json', 'utf8'));
+              
+              results.forEach(result => {
+                result.messages.forEach(message => {
+                  const file = result.filePath.replace(process.cwd() + '/', '');
+                  const line = message.line || 1;
+                  const column = message.column || 1;
+                  const severity = message.severity === 2 ? 'error' : 'warning';
+                  const ruleId = message.ruleId ? \` (\${message.ruleId})\` : '';
+                  const messageText = message.message;
+                  
+                  console.log(\`::\${severity} title=ESLint\${ruleId},file=\${file},line=\${line},col=\${column}::\${file}:\${line}:\${column}: \${messageText}\`);
+                });
+              });
+            "
+          fi
+          
+          # Exit with ESLint's original exit code
+          exit $ESLINT_EXIT_CODE
+
+      - name: Check TypeScript (with Annotations)
+        id: typescript_check
+        continue-on-error: true
+        run: |
+          echo "Running TypeScript check with GitHub annotations..."
+          set +e  # Don't exit on TypeScript failure
+          
+          # Check if tsconfig.json exists
+          if [ ! -f "tsconfig.json" ]; then
+            echo "::notice::No tsconfig.json found, skipping TypeScript checks"
+            exit 0
+          fi
+          
+          npx tsc --noEmit --pretty false > typescript_output.txt 2>&1
+          TSC_EXIT_CODE=$?
+
+          # Parse TypeScript output and generate GitHub annotations
+          if [ -f typescript_output.txt ]; then
+            while IFS= read -r line; do
+              # Match pattern: file.ts(line,column): error TS2xxx: message
+              if echo "$line" | grep -qE '^[^(]+\([0-9]+,[0-9]+\):'; then
+                # Extract file, line, column, and message
+                file=$(echo "$line" | sed -E 's/^([^(]+)\([0-9]+,[0-9]+\):.*/\1/')
+                coords=$(echo "$line" | sed -E 's/^[^(]+\(([0-9]+,[0-9]+)\):.*/\1/')
+                line_num=$(echo "$coords" | cut -d',' -f1)
+                col_num=$(echo "$coords" | cut -d',' -f2)
+                message=$(echo "$line" | sed -E 's/^[^(]+\([0-9]+,[0-9]+\): (error|warning) [A-Z0-9]+: //')
+                
+                # Determine if it's an error or warning
+                if echo "$line" | grep -q "error TS"; then
+                  level="error"
+                  type="error"
+                else
+                  level="warning"
+                  type="warning"
+                fi
+                
+                # Generate GitHub annotation
+                echo "::${level} title=TypeScript (${type}),file=${file},line=${line_num},col=${col_num}::${file}:${line_num}:${col_num}: ${type}: ${message}"
+              fi
+            done < typescript_output.txt
+          fi
+          
+          # Exit with TypeScript's original exit code
+          exit $TSC_EXIT_CODE
+  
+      - name: Set Frontend Checks Outcome
+        id: outcome
+        if: always()
+        run: |
+          if [[ "${{ steps.prettier_format.outcome }}" == "failure" || "${{ steps.eslint_check.outcome }}" == "failure" || "${{ steps.typescript_check.outcome }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **Frontend Quality:** Checks failed (see annotations for details)." >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **Frontend Quality:** All checks passed." >> $GITHUB_OUTPUT
+          fi
