@@ -25,6 +25,38 @@ permissions:
   pull-requests: write
   checks: write
 
+env:
+  DEFAULT_PROJECT_CONFIG: |
+    [build-system]
+    requires = ["setuptools>=61.0", "wheel"]
+    build-backend = "setuptools.build_meta"
+
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Project"
+    requires-python = ">=3.11"
+    dependencies = []
+
+  DEFAULT_RUFF_CONFIG: |
+    [tool.ruff.format]
+    quote-style = "double"
+    indent-style = "space"
+
+    [tool.ruff]
+    line-length = 88
+
+    [tool.ruff.lint]
+    select = ["E", "F", "N", "I"]
+
+
+  DEFAULT_MYPY_CONFIG: |
+    [tool.mypy]
+    strict = true
+    namespace_packages = true
+    warn_unused_ignores = false
+    ignore_missing_imports = true
+    
 jobs:
   check-python-code:
     name: 'Python Quality Checks'
@@ -37,6 +69,33 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }} 
+
+      - name: Create default pyproject.toml if missing
+        run: |
+          if [ ! -f "pyproject.toml" ]; then
+            echo "Creating default pyproject.toml..."
+            {
+              echo "${{ env.DEFAULT_PROJECT_CONFIG }}"
+              echo ""
+              echo "${{ env.DEFAULT_RUFF_CONFIG }}"
+              echo ""
+              echo "${{ env.DEFAULT_MYPY_CONFIG }}"
+            } > pyproject.toml
+          else
+            # Check and add ruff config if missing
+            if ! grep -q "\[tool.ruff\]" pyproject.toml; then
+              echo "Adding default ruff configuration to pyproject.toml..."
+              echo "" >> pyproject.toml
+              echo "${{ env.DEFAULT_RUFF_CONFIG }}" >> pyproject.toml
+            fi
+            
+            # Check and add mypy config if missing
+            if ! grep -q "\[tool.mypy\]" pyproject.toml; then
+              echo "Adding default mypy configuration to pyproject.toml..."
+              echo "" >> pyproject.toml
+              echo "${{ env.DEFAULT_MYPY_CONFIG }}" >> pyproject.toml
+            fi
+          fi
 
       - name: Set up Python
         id: setup_python
@@ -53,6 +112,10 @@ jobs:
       - name: Install Dependencies and Linters
         run: |
           uv sync
+
+      - name: Ensure Ruff and Mypy are installed
+        run: |
+          uv pip install ruff mypy
             
       - name: Check Ruff Formatter
         id: ruff_format
