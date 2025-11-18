@@ -25,6 +25,38 @@ permissions:
   pull-requests: write
   checks: write
 
+env:
+  DEFAULT_PRETTIER_CONFIG: |
+    {
+      "semi": true,
+      "singleQuote": true,
+      "trailingComma": "es5",
+      "tabWidth": 2,
+      "useTabs": false,
+      "arrowParens": "always",
+      "printWidth": 80
+    }
+  DEFAULT_ESLINT_CONFIG: |
+    {
+      "env": {
+        "browser": true,
+        "es2021": true,
+        "node": true
+      },
+      "extends": [
+        "eslint:recommended"
+      ],
+      "parserOptions": {
+        "ecmaVersion": "latest",
+        "sourceType": "module"
+      },
+      "rules": {
+        "no-console": "warn",
+        "no-unused-vars": "warn",
+        "no-var": "error"
+      }
+    }
+
 jobs:
   check-frontend-code:
     name: 'Frontend Quality Checks'
@@ -37,6 +69,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }} 
+
+      - name: Set up default Prettier config
+        run: |
+          if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && [ ! -f "prettier.config.js" ]; then
+            echo "${{ env.DEFAULT_PRETTIER_CONFIG }}" > .prettierrc.json
+          fi
+
+      - name: Set up default ESLint config
+        run: |
+          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
+            echo "${{ env.DEFAULT_ESLINT_CONFIG }}" > .eslintrc.json
+          fi
 
       - name: Check for package.json
         id: detect_lock
@@ -60,6 +104,11 @@ jobs:
         run: |
           npm install --only=dev
           
+      - name: Ensure Prettier and ESLint are installed
+        run: |
+          npm list prettier > /dev/null 2>&1 || npm install --save-dev prettier
+          npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
+        
       - name: Check Prettier Formatter
         id: prettier_format
         continue-on-error: true
