@@ -167,51 +167,51 @@ jobs:
         id: typescript_check
         continue-on-error: true
         run: |
-           echo "Running TypeScript check with GitHub annotations..."
-           set +e  # Don't exit on TypeScript failure
-           
-           # Check if tsconfig.json exists
-           if [ ! -f "tsconfig.json" ]; then
-             echo "::notice::No tsconfig.json found, skipping TypeScript checks"
-             echo "typescript_available=false" >> $GITHUB_OUTPUT
-             exit 0
-           fi
-           
-           echo "typescript_available=true" >> $GITHUB_OUTPUT
-           
-           npx tsc --noEmit --pretty false > typescript_output.txt 2>&1
-           TSC_EXIT_CODE=$?
+          echo "Running TypeScript check with GitHub annotations..."
+          set +e  # Don't exit on TypeScript failure
+          
+          # Check if tsconfig.json exists
+          if [ ! -f "tsconfig.json" ]; then
+            echo "::notice::No tsconfig.json found, skipping TypeScript checks"
+            echo "typescript_available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "typescript_available=true" >> $GITHUB_OUTPUT
+          
+          npx tsc --noEmit --pretty false > typescript_output.txt 2>&1
+          TSC_EXIT_CODE=$?
 
-           # Parse TypeScript output and generate GitHub annotations
-           if [ -f typescript_output.txt ]; then
-             while IFS= read -r line; do
-               # Match pattern: file.ts(line,column): error TS2xxx: message
-               if echo "$line" | grep -qE '^[^(]+\([0-9]+,[0-9]+\):'; then
-                 # Extract file, line, column, and message
-                 file=$(echo "$line" | sed -E 's/^([^(]+)\([0-9]+,[0-9]+\):.*/\1/')
-                 coords=$(echo "$line" | sed -E 's/^[^(]+\(([0-9]+,[0-9]+)\):.*/\1/')
-                 line_num=$(echo "$coords" | cut -d',' -f1)
-                 col_num=$(echo "$coords" | cut -d',' -f2)
-                 message=$(echo "$line" | sed -E 's/^[^(]+\([0-9]+,[0-9]+\): (error|warning) [A-Z0-9]+: //')
-                 
-                 # Determine if it's an error or warning
-                 if echo "$line" | grep -q "error TS"; then
-                   level="error"
-                   type="error"
-                 else
-                   level="warning"
-                   type="warning"
-                 fi
-                 
-                 # Generate GitHub annotation
-                 echo "::${level} title=TypeScript (${type}),file=${file},line=${line_num},col=${col_num}::${file}:${line_num}:${col_num}: ${type}: ${message}"
-               fi
-             done < typescript_output.txt
-           fi
-           
-           # Exit with TypeScript's original exit code
-           exit $TSC_EXIT_CODE
-  
+          # Parse TypeScript output and generate GitHub annotations
+          if [ -f typescript_output.txt ]; then
+            while IFS= read -r line; do
+              # Match pattern: file.ts(line,column): error TS2xxx: message
+              if echo "$line" | grep -qE '^[^(]+\([0-9]+,[0-9]+\):'; then
+                # Extract file, line, column, and message
+                file=$(echo "$line" | sed -E 's/^([^(]+)\([0-9]+,[0-9]+\):.*/\1/')
+                coords=$(echo "$line" | sed -E 's/^[^(]+\(([0-9]+,[0-9]+)\):.*/\1/')
+                line_num=$(echo "$coords" | cut -d',' -f1)
+                col_num=$(echo "$coords" | cut -d',' -f2)
+                message=$(echo "$line" | sed -E 's/^[^(]+\([0-9]+,[0-9]+\): (error|warning) [A-Z0-9]+: //')
+                
+                # Determine if it's an error or warning
+                if echo "$line" | grep -q "error TS"; then
+                  level="error"
+                  type="error"
+                else
+                  level="warning"
+                  type="warning"
+                fi
+                
+                # Generate GitHub annotation
+                echo "::${level} title=TypeScript (${type}),file=${file},line=${line_num},col=${col_num}::${file}:${line_num}:${col_num}: ${type}: ${message}"
+              fi
+            done < typescript_output.txt
+          fi
+          
+          # Exit with TypeScript's original exit code
+          exit $TSC_EXIT_CODE
+
       - name: Set Frontend Checks Outcome
         id: outcome
         if: always()
