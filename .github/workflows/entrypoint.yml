@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+      run-frontend-checks:
+        description: 'Whether to run the frontend code quality checks.'
+        required: false
+        type: boolean
+        default: false
     secrets:
       CHECKER_TOKEN:
         description: 'The GITHUB_TOKEN passed from the caller.'
@@ -58,6 +63,13 @@ jobs:
     secrets:
       CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
 
+  call-frontend-checks:
+    name: Run Frontend Quality Checks
+    if: inputs.run-frontend-checks
+    uses: ./.github/workflows/reusables-frontend.yml
+    secrets:
+      CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+
   report-summary:
     name: Report Overall Summary
     runs-on: ubuntu-latest
@@ -65,6 +77,7 @@ jobs:
       - call-basic-checks
       - call-python-checks
       - call-config-checks
+      - call-frontend-checks
     if: always() # This job runs even if previous jobs fail
     steps:
       - name: Build and Post Comment
@@ -143,6 +156,21 @@ jobs:
                 }
               } else {
                 comment_body += "⚠️ **Config Checks:** Completed but no outputs received\n";
+              }
+            }
+
+            // --- Frontend Checks ---
+            if (wasJobRun(needs['call-frontend-checks'])) {
+              anyJobRan = true;
+              const { outputs } = needs['call-frontend-checks'];
+              
+              if (outputs) {
+                comment_body += getOutput(outputs, 'frontend-summary', '⚠️ **Frontend Quality:** No output received') + "\n";
+                if (getOutput(outputs, 'frontend-status') === 'failure') {
+                  all_passed = false;
+                }
+              } else {
+                comment_body += "⚠️ **Frontend Checks:** Completed but no outputs received\n";
               }
             }
             
