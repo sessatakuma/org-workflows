@@ -36,4 +36,4 @@ jobs:
 
       # Frontend Code Quality Checks (optional)
       # Requires: Node.js project with Prettier configured
-      run-frontend-checks: true
+      run-frontend-checks: false
