@@ -102,21 +102,36 @@ jobs:
         continue-on-error: true
         run: |
           echo "Running prettier format check..."
-          npx prettier --check . || {
+          if ! npx prettier --check .; then
             echo "Prettier formatting issues found. Run 'npm run format' to fix them."
+            
             # Get list of files that need formatting
-            npx prettier --check . --list-different > prettier_output.txt 2>&1 || true
+            files=$(npx prettier --list-different .)
             
             # Generate GitHub annotations for formatting issues
-            if [ -f prettier_output.txt ]; then
-              while IFS= read -r file; do
-                if [ -n "$file" ] && [ -f "$file" ]; then
-                  echo "::error title=Prettier Formatting,file=${file}::${file}: File needs formatting. Run 'npm run format' to fix."
+            for file in $files; do
+              if [ -f "$file" ]; then
+                # Generate formatted version to compare
+                npx prettier "$file" > "${file}.formatted"
+                
+                # Find the first line that differs
+                # diff output format: @@ -start,len +start,len @@
+                # We extract the start line of the first hunk
+                line_num=$(diff -u "$file" "${file}.formatted" | grep -m 1 "^@@" | sed 's/^@@ -//' | cut -d',' -f1 | tr -d ' ')
+                
+                # Default to line 1 if detection fails
+                if [ -z "$line_num" ]; then
+                  line_num=1
                 fi
-              done < prettier_output.txt
-            fi
+                
+                echo "::error title=Prettier Formatting,file=${file},line=${line_num}::${file}:${line_num}: File needs formatting. Run 'npm run format' to fix."
+                
+                # Clean up
+                rm "${file}.formatted"
+              fi
+            done
             exit 1
-          }
+          fi
 
       - name: Check ESLint (with Annotations)
         id: eslint_check
