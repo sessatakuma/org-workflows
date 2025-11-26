@@ -53,7 +53,7 @@ jobs:
 
       - name: Install yamllint
         run: |
-          uv pip install yamllint
+          uv tool install yamllint
 
       - name: Find and Check YAML Files
         id: check
