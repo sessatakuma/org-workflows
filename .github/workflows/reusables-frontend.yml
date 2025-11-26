@@ -105,19 +105,37 @@ jobs:
           if ! npx prettier --check .; then
             echo "Prettier formatting issues found. Run 'npm run format' to fix them."
             
-            # Get list of files that need formatting
-            files=$(npx prettier --list-different .)
+            # Get list of files that need formatting and capture stderr for syntax errors
+            # Use || true to prevent exit on syntax errors (exit code 2)
+            files=$(npx prettier --list-different . 2> prettier_stderr.txt || true)
+            
+            # Generate GitHub annotations for syntax errors from stderr
+            if [ -f prettier_stderr.txt ]; then
+              grep "\[error\]" prettier_stderr.txt | grep "SyntaxError" | while read -r line; do
+                # Extract file and message
+                # Format: [error] file: SyntaxError: message (line:col)
+                file=$(echo "$line" | sed -E 's/\[error\] ([^:]+):.*/\1/')
+                message=$(echo "$line" | sed -E 's/\[error\] [^:]+: (.*)/\1/')
+                if [ -n "$file" ]; then
+                  echo "::error title=Prettier Syntax Error,file=${file}::${message}"
+                fi
+              done
+            fi
             
             # Generate GitHub annotations for formatting issues
             for file in $files; do
               if [ -f "$file" ]; then
                 # Generate formatted version to compare
-                npx prettier "$file" > "${file}.formatted"
+                npx prettier "$file" > "${file}.formatted" 2>/dev/null || true
+                
+                if [ ! -f "${file}.formatted" ]; then
+                   continue
+                fi
                 
                 # Find the first line that differs
-                # diff output format: @@ -start,len +start,len @@
+                # diff output format: @@ -start,len +start,len @@ or @@ -start +start @@
                 # We extract the start line of the first hunk
-                line_num=$(diff -u "$file" "${file}.formatted" | grep -m 1 "^@@" | sed 's/^@@ -//' | cut -d',' -f1 | tr -d ' ')
+                line_num=$(diff -u "$file" "${file}.formatted" | grep -m 1 "^@@" | sed 's/^@@ -\([0-9]*\).*/\1/')
                 
                 # Default to line 1 if detection fails
                 if [ -z "$line_num" ]; then
@@ -130,7 +148,11 @@ jobs:
                 rm "${file}.formatted"
               fi
             done
-            exit 1
+            
+            # Exit if there were any issues (files list not empty OR stderr has errors)
+            if [ -n "$files" ] || [ -s prettier_stderr.txt ]; then
+              exit 1
+            fi
           fi
 
       - name: Check ESLint (with Annotations)
