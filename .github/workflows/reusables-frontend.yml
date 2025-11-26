@@ -37,24 +37,41 @@ env:
       "printWidth": 80
     }
   DEFAULT_ESLINT_CONFIG: |
-    {
-      "env": {
-        "browser": true,
-        "es2021": true,
-        "node": true
-      },
-      "extends": [
-        "eslint:recommended"
-      ],
-      "parserOptions": {
-        "ecmaVersion": "latest",
-        "sourceType": "module"
-      },
-      "rules": {
-        "no-console": "warn",
-        "no-unused-vars": "warn",
-        "no-var": "error"
+    import js from "@eslint/js";
+    import globals from "globals";
+
+    export default [
+      js.configs.recommended,
+      {
+        languageOptions: {
+          ecmaVersion: "latest",
+          sourceType: "module",
+          globals: {
+            ...globals.browser,
+            ...globals.node,
+            ...globals.es2021
+          }
+        },
+        rules: {
+          "no-console": "warn",
+          "no-unused-vars": "warn",
+          "no-var": "error"
+        }
       }
+    ];
+  DEFAULT_TS_CONFIG: |
+    {
+      "compilerOptions": {
+        "target": "es2020",
+        "module": "esnext",
+        "lib": ["es2020", "dom"],
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "moduleResolution": "node"
+      },
+      "include": ["src"]
     }
 
 jobs:
@@ -73,13 +90,19 @@ jobs:
       - name: Set up default Prettier config
         run: |
           if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && [ ! -f "prettier.config.js" ]; then
-            echo "${{ env.DEFAULT_PRETTIER_CONFIG }}" > .prettierrc.json
+            echo '${{ env.DEFAULT_PRETTIER_CONFIG }}' > .prettierrc.json
           fi
 
       - name: Set up default ESLint config
         run: |
-          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
-            echo "${{ env.DEFAULT_ESLINT_CONFIG }}" > .eslintrc.json
+          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.mjs" ]; then
+            echo '${{ env.DEFAULT_ESLINT_CONFIG }}' > eslint.config.mjs
+          fi
+
+      - name: Set up default TypeScript config
+        run: |
+          if [ ! -f "tsconfig.json" ]; then
+            echo '${{ env.DEFAULT_TS_CONFIG }}' > tsconfig.json
           fi
 
       - name: Set up Node.js
@@ -96,6 +119,7 @@ jobs:
         run: |
           npm list prettier > /dev/null 2>&1 || npm install --save-dev prettier
           npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
+          npm list globals > /dev/null 2>&1 || npm install --save-dev globals
         
       - name: Check Prettier Formatter
         id: prettier_format
@@ -208,9 +232,9 @@ jobs:
           echo "Running TypeScript check with GitHub annotations..."
           set +e  # Don't exit on TypeScript failure
           
-          # Check if tsconfig.json exists
+          # Check if tsconfig.json exists (it should, because we generated a default if missing)
           if [ ! -f "tsconfig.json" ]; then
-            echo "::notice::No tsconfig.json found, skipping TypeScript checks"
+            echo "::notice::No tsconfig.json found (unexpected), skipping TypeScript checks"
             echo "typescript_available=false" >> $GITHUB_OUTPUT
             exit 0
           fi
