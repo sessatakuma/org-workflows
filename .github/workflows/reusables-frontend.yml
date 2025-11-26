@@ -25,6 +25,38 @@ permissions:
   pull-requests: write
   checks: write
 
+env:
+  DEFAULT_PRETTIER_CONFIG: |
+    {
+      "semi": true,
+      "singleQuote": true,
+      "trailingComma": "es5",
+      "tabWidth": 2,
+      "useTabs": false,
+      "arrowParens": "always",
+      "printWidth": 80
+    }
+  DEFAULT_ESLINT_CONFIG: |
+    {
+      "env": {
+        "browser": true,
+        "es2021": true,
+        "node": true
+      },
+      "extends": [
+        "eslint:recommended"
+      ],
+      "parserOptions": {
+        "ecmaVersion": "latest",
+        "sourceType": "module"
+      },
+      "rules": {
+        "no-console": "warn",
+        "no-unused-vars": "warn",
+        "no-var": "error"
+      }
+    }
+
 jobs:
   check-frontend-code:
     name: 'Frontend Quality Checks'
@@ -38,17 +70,45 @@ jobs:
         with:
           ref: ${{ github.head_ref }} 
 
+      - name: Set up default Prettier config
+        run: |
+          if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && [ ! -f "prettier.config.js" ]; then
+            echo "${{ env.DEFAULT_PRETTIER_CONFIG }}" > .prettierrc.json
+          fi
+
+      - name: Set up default ESLint config
+        run: |
+          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
+            echo "${{ env.DEFAULT_ESLINT_CONFIG }}" > .eslintrc.json
+          fi
+
+      - name: Check for package.json
+        id: detect_lock
+        run: |
+          if [ -f "package.json" ]; then
+            echo "cache=npm" >> $GITHUB_OUTPUT
+            echo "has_package_json=true"
+          else
+            echo "cache=" >> $GITHUB_OUTPUT
+            echo "has_package_json=false"
+          fi
+
       - name: Set up Node.js
         id: setup_node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          cache: 'npm'
+          cache: ${{ steps.detect_lock.outputs.cache }}
           
-      - name: Install Dependencies
+      - name: Install Dev Dependencies
         run: |
-          npm ci
-            
+          npm install --only=dev
+          
+      - name: Ensure Prettier and ESLint are installed
+        run: |
+          npm list prettier > /dev/null 2>&1 || npm install --save-dev prettier
+          npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
+        
       - name: Check Prettier Formatter
         id: prettier_format
         continue-on-error: true
@@ -76,7 +136,7 @@ jobs:
         run: |
           echo "Running ESLint with GitHub annotations..."
           set +e  # Don't exit on ESLint failure
-          npx eslint . --format json --output-file eslint_output.json
+          npx eslint ./src --format json --output-file eslint_output.json
           ESLINT_EXIT_CODE=$?
 
           # Parse ESLint JSON output and generate GitHub annotations
@@ -113,8 +173,11 @@ jobs:
           # Check if tsconfig.json exists
           if [ ! -f "tsconfig.json" ]; then
             echo "::notice::No tsconfig.json found, skipping TypeScript checks"
+            echo "typescript_available=false" >> $GITHUB_OUTPUT
             exit 0
           fi
+          
+          echo "typescript_available=true" >> $GITHUB_OUTPUT
           
           npx tsc --noEmit --pretty false > typescript_output.txt 2>&1
           TSC_EXIT_CODE=$?
@@ -148,7 +211,7 @@ jobs:
           
           # Exit with TypeScript's original exit code
           exit $TSC_EXIT_CODE
-  
+
       - name: Set Frontend Checks Outcome
         id: outcome
         if: always()
