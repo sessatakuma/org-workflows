@@ -111,15 +111,28 @@ jobs:
             
             # Generate GitHub annotations for syntax errors from stderr
             if [ -f prettier_stderr.txt ]; then
-              grep "\[error\]" prettier_stderr.txt | grep "SyntaxError" | while read -r line; do
+              # Grep for [error] lines, but ensure we don't fail if none found
+              # Also capture "JSON Error" and other types, not just "SyntaxError"
+              grep "\[error\]" prettier_stderr.txt | while read -r line; do
                 # Extract file and message
-                # Format: [error] file: SyntaxError: message (line:col)
-                file=$(echo "$line" | sed -E 's/\[error\] ([^:]+):.*/\1/')
-                message=$(echo "$line" | sed -E 's/\[error\] [^:]+: (.*)/\1/')
-                if [ -n "$file" ]; then
-                  echo "::error title=Prettier Syntax Error,file=${file}::${message}"
+                # Format: [error] file: ErrorType: message
+                # Or: [error] ErrorType in file:
+                
+                # Simple extraction: everything after [error] 
+                message=$(echo "$line" | sed 's/^\[error\] //')
+                
+                # Try to extract filename if it appears at the start
+                # Pattern: [error] filename: ...
+                possible_file=$(echo "$message" | cut -d':' -f1)
+                
+                if [ -f "$possible_file" ]; then
+                   echo "::error title=Prettier Error,file=${possible_file}::${message}"
+                else
+                   # Fallback: just output the error without file association if we can't parse it easily
+                   # or if it's a general error
+                   echo "::error title=Prettier Error::${message}"
                 fi
-              done
+              done || true
             fi
             
             # Generate GitHub annotations for formatting issues
