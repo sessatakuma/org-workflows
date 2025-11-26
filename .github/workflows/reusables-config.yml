@@ -90,10 +90,18 @@ jobs:
               MESSAGE="❌ **YAML Files:** Found issues in $FAILED_COUNT of $FILE_COUNT file(s) (e.g., \`$FIRST_FAILED\`)"
               STATUS="failure"
               
-              # Show first few errors in GitHub annotations
-              echo "$YAMLLINT_OUTPUT" | head -n 10 | while IFS=: read -r file line col level msg; do
+              # Show errors in GitHub annotations
+              echo "$YAMLLINT_OUTPUT" | while IFS=: read -r file line col level msg; do
                 if [ -n "$file" ] && [ -n "$line" ]; then
-                  echo "::error file=${file},line=${line},col=${col}::${msg}"
+                  # Clean up level (remove brackets)
+                  clean_level=$(echo "$level" | tr -d '[]' | xargs)
+                  # Map yamllint level to GitHub annotation level
+                  if [ "$clean_level" = "warning" ]; then
+                    gh_level="warning"
+                  else
+                    gh_level="error"
+                  fi
+                  echo "::${gh_level} file=${file},line=${line},col=${col}::${msg}"
                 fi
               done
             fi
@@ -151,8 +159,18 @@ jobs:
                   FAILED_FILES="$file"
                 fi
                 # Get error details
-                ERROR_MSG=$(jq empty "$file" 2>&1 || true)
-                echo "::error file=${file}::JSON validation failed: ${ERROR_MSG}"
+                ERROR_OUTPUT=$(jq empty "$file" 2>&1 || true)
+                
+                # Extract line and column if possible
+                # Example: parse error: ... at line 10, column 20
+                if echo "$ERROR_OUTPUT" | grep -q "at line [0-9]\+, column [0-9]\+"; then
+                  line=$(echo "$ERROR_OUTPUT" | grep -o "at line [0-9]\+" | grep -o "[0-9]\+")
+                  col=$(echo "$ERROR_OUTPUT" | grep -o "column [0-9]\+" | grep -o "[0-9]\+")
+                  msg=$(echo "$ERROR_OUTPUT" | sed -E 's/ at line [0-9]+, column [0-9]+.*//')
+                  echo "::error file=${file},line=${line},col=${col}::${msg}"
+                else
+                  echo "::error file=${file}::JSON validation failed: ${ERROR_OUTPUT}"
+                fi
               fi
             done <<< "$JSON_FILES"
 
@@ -223,8 +241,20 @@ jobs:
               STATUS="failure"
               
               # Show errors as GitHub annotations
-              echo "$TAPLO_OUTPUT" | grep "error" | head -n 10 | while IFS= read -r line; do
-                echo "::error::TOML: ${line}"
+              # Taplo output format is not easily machine parsable, but we try to extract info
+              # Typical error: "error: ... at line 10 column 5" or similar
+              echo "$TAPLO_OUTPUT" | while read -r line; do
+                if echo "$line" | grep -q "error"; then
+                   # Try to find file path if mentioned (often not in the same line as error)
+                   # For now, we just output the error message. 
+                   # If we can parse "at line X", we add it.
+                   if echo "$line" | grep -q "line [0-9]\+"; then
+                     line_num=$(echo "$line" | grep -o "line [0-9]\+" | grep -o "[0-9]\+")
+                     echo "::error::TOML: ${line} (Line ${line_num})"
+                   else
+                     echo "::error::TOML: ${line}"
+                   fi
+                fi
               done
             fi
           fi
