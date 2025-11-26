@@ -82,23 +82,11 @@ jobs:
             echo "${{ env.DEFAULT_ESLINT_CONFIG }}" > .eslintrc.json
           fi
 
-      - name: Check for package.json
-        id: detect_lock
-        run: |
-          if [ -f "package.json" ]; then
-            echo "cache=npm" >> $GITHUB_OUTPUT
-            echo "has_package_json=true"
-          else
-            echo "cache=" >> $GITHUB_OUTPUT
-            echo "has_package_json=false"
-          fi
-
       - name: Set up Node.js
         id: setup_node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          cache: ${{ steps.detect_lock.outputs.cache }}
           
       - name: Install Dev Dependencies
         run: |
