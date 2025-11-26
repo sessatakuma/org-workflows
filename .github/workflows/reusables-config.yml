@@ -166,7 +166,7 @@ jobs:
                 if echo "$ERROR_OUTPUT" | grep -q "at line [0-9]\+, column [0-9]\+"; then
                   line=$(echo "$ERROR_OUTPUT" | grep -o "at line [0-9]\+" | grep -o "[0-9]\+")
                   col=$(echo "$ERROR_OUTPUT" | grep -o "column [0-9]\+" | grep -o "[0-9]\+")
-                  msg=$(echo "$ERROR_OUTPUT" | sed -E 's/ at line [0-9]+, column [0-9]+.*//')
+                  msg=$(echo "$ERROR_OUTPUT" | sed -E 's/.*: (.*) at line.*/\1/')
                   echo "::error file=${file},line=${line},col=${col}::${msg}"
                 else
                   echo "::error file=${file}::JSON validation failed: ${ERROR_OUTPUT}"
@@ -241,19 +241,24 @@ jobs:
               STATUS="failure"
               
               # Show errors as GitHub annotations
-              # Taplo output format is not easily machine parsable, but we try to extract info
-              # Typical error: "error: ... at line 10 column 5" or similar
-              echo "$TAPLO_OUTPUT" | while read -r line; do
-                if echo "$line" | grep -q "error"; then
-                   # Try to find file path if mentioned (often not in the same line as error)
-                   # For now, we just output the error message. 
-                   # If we can parse "at line X", we add it.
-                   if echo "$line" | grep -q "line [0-9]\+"; then
-                     line_num=$(echo "$line" | grep -o "line [0-9]\+" | grep -o "[0-9]\+")
-                     echo "::error::TOML: ${line} (Line ${line_num})"
-                   else
-                     echo "::error::TOML: ${line}"
+              # Taplo output is visual, e.g.:
+              #   ┌─ file.toml:1:15
+              echo "$TAPLO_OUTPUT" | while IFS= read -r line; do
+                # Check for location line: ┌─ file:line:col
+                if echo "$line" | grep -q "┌─ "; then
+                   # Extract info using sed
+                   # Remove leading whitespace and ┌─ 
+                   clean_line=$(echo "$line" | sed 's/^[[:space:]]*┌─ //')
+                   file=$(echo "$clean_line" | cut -d':' -f1)
+                   line_num=$(echo "$clean_line" | cut -d':' -f2)
+                   col_num=$(echo "$clean_line" | cut -d':' -f3)
+                   
+                   if [ -n "$file" ] && [ -n "$line_num" ]; then
+                     echo "::error file=${file},line=${line_num},col=${col_num}::TOML syntax error"
                    fi
+                elif echo "$line" | grep -q "error:"; then
+                   # Fallback for general errors
+                   echo "::error::TOML: ${line}"
                 fi
               done
             fi
