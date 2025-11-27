@@ -165,8 +165,12 @@ jobs:
               const { outputs } = needs['call-frontend-checks'];
               
               if (outputs) {
-                comment_body += getOutput(outputs, 'frontend-summary', '⚠️ **Frontend Quality:** No output received') + "\n";
-                if (getOutput(outputs, 'frontend-status') === 'failure') {
+              comment_body += getOutput(outputs, 'prettier-summary', '⚠️ **Prettier:** No output received') + "\n";
+              comment_body += getOutput(outputs, 'eslint-summary', '⚠️ **ESLint:** No output received') + "\n";
+              comment_body += getOutput(outputs, 'typescript-summary', '⚠️ **TypeScript:** No output received') + "\n";
+                if (getOutput(outputs, 'prettier-status') === 'failure' ||
+                    getOutput(outputs, 'eslint-status') === 'failure' ||
+                    getOutput(outputs, 'typescript-status') === 'failure') {
                   all_passed = false;
                 }
               } else {

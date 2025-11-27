@@ -13,12 +13,24 @@ on:
         description: 'The GITHUB_TOKEN passed from the caller'
         required: true
     outputs:
-      frontend-summary:
-        description: "A summary of the Frontend code quality checks."
-        value: ${{ jobs.check-frontend-code.outputs.summary }}
-      frontend-status:
-        description: "The overall status of the Frontend checks."
-        value: ${{ jobs.check-frontend-code.outputs.status }}
+      prettier-status:
+        description: "The status of the Prettier formatting check."
+        value: ${{ jobs.check-prettier.outputs.status }}
+      prettier-summary:
+        description: "A summary of the Prettier formatting check."
+        value: ${{ jobs.check-prettier.outputs.summary }}
+      eslint-status:
+        description: "The status of the ESLint check."
+        value: ${{ jobs.check-eslint.outputs.status }}
+      eslint-summary:
+        description: "A summary of the ESLint check."
+        value: ${{ jobs.check-eslint.outputs.summary }}
+      typescript-status:
+        description: "The status of the TypeScript check."
+        value: ${{ jobs.check-typescript.outputs.status }}
+      typescript-summary:
+        description: "A summary of the TypeScript check."
+        value: ${{ jobs.check-typescript.outputs.summary }}
 
 permissions:
   contents: read
@@ -89,17 +101,17 @@ env:
     }
 
 jobs:
-  check-frontend-code:
-    name: 'Frontend Quality Checks'
+  check-prettier:
+    name: 'Check Prettier Formatting'
     runs-on: ubuntu-latest
     outputs:
-      summary: ${{ steps.outcome.outputs.summary }}
-      status: ${{ steps.outcome.outputs.status }}
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }} 
+          ref: ${{ github.head_ref }}
 
       - name: Set up default Prettier config
         run: |
@@ -107,46 +119,30 @@ jobs:
             echo '${{ env.DEFAULT_PRETTIER_CONFIG }}' > .prettierrc.json
           fi
 
-      - name: Set up default ESLint config
-        run: |
-          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.mjs" ]; then
-            echo '${{ env.DEFAULT_ESLINT_CONFIG }}' > eslint.config.mjs
-          fi
-
-      - name: Set up default TypeScript config
-        run: |
-          if [ ! -f "tsconfig.json" ]; then
-            echo '${{ env.DEFAULT_TS_CONFIG }}' > tsconfig.json
-          fi
-
       - name: Set up Node.js
-        id: setup_node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          
+
       - name: Install Dev Dependencies
         run: |
           npm install --only=dev
-          
-      - name: Ensure Prettier and ESLint are installed
+
+      - name: Ensure Prettier is installed
         run: |
           npm list prettier > /dev/null 2>&1 || npm install --save-dev prettier
-          npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
-          npm list globals > /dev/null 2>&1 || npm install --save-dev globals
-        
+
       - name: Check Prettier Formatter
-        id: prettier_format
-        continue-on-error: true
+        id: check
         run: |
           echo "Running prettier format check..."
           if ! npx prettier --check .; then
             echo "Prettier formatting issues found. Run 'npm run format' to fix them."
-            
+
             # Get list of files that need formatting and capture stderr for syntax errors
             # Use || true to prevent exit on syntax errors (exit code 2)
             files=$(npx prettier --list-different . 2> prettier_stderr.txt || true)
-            
+
             # Generate GitHub annotations for syntax errors from stderr
             if [ -f prettier_stderr.txt ]; then
               # Grep for [error] lines, but ensure we don't fail if none found
@@ -155,14 +151,14 @@ jobs:
                 # Extract file and message
                 # Format: [error] file: ErrorType: message
                 # Or: [error] ErrorType in file:
-                
-                # Simple extraction: everything after [error] 
+
+                # Simple extraction: everything after [error]
                 message=$(echo "$line" | sed 's/^\[error\] //')
-                
+
                 # Try to extract filename if it appears at the start
                 # Pattern: [error] filename: ...
                 possible_file=$(echo "$message" | cut -d':' -f1)
-                
+
                 if [ -f "$possible_file" ]; then
                    echo "::error title=Prettier Error,file=${possible_file}::${message}"
                 else
@@ -172,43 +168,77 @@ jobs:
                 fi
               done || true
             fi
-            
+
             # Generate GitHub annotations for formatting issues
             for file in $files; do
               if [ -f "$file" ]; then
                 # Generate formatted version to compare
                 npx prettier "$file" > "${file}.formatted" 2>/dev/null || true
-                
+
                 if [ ! -f "${file}.formatted" ]; then
                    continue
                 fi
-                
+
                 # Find the first line that differs
                 # diff output format: @@ -start,len +start,len @@ or @@ -start +start @@
                 # We extract the start line of the first hunk
                 line_num=$(diff -u "$file" "${file}.formatted" | grep -m 1 "^@@" | sed 's/^@@ -\([0-9]*\).*/\1/')
-                
+
                 # Default to line 1 if detection fails
                 if [ -z "$line_num" ]; then
                   line_num=1
                 fi
-                
+
                 echo "::error title=Prettier Formatting,file=${file},line=${line_num}::${file}:${line_num}: File needs formatting. Run 'npm run format' to fix."
-                
+
                 # Clean up
                 rm "${file}.formatted"
               fi
             done
-            
+
             # Exit if there were any issues (files list not empty OR stderr has errors)
             if [ -n "$files" ] || [ -s prettier_stderr.txt ]; then
               exit 1
             fi
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **Prettier:** All files are properly formatted." >> $GITHUB_OUTPUT
           fi
 
-      - name: Check ESLint (with Annotations)
-        id: eslint_check
-        continue-on-error: true
+  check-eslint:
+    name: 'Check ESLint'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up default ESLint config
+        run: |
+          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.mjs" ]; then
+            echo '${{ env.DEFAULT_ESLINT_CONFIG }}' > eslint.config.mjs
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install Dev Dependencies
+        run: |
+          npm install --only=dev
+
+      - name: Ensure ESLint is installed
+        run: |
+          npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
+          npm list globals > /dev/null 2>&1 || npm install --save-dev globals
+
+      - name: Check ESLint
+        id: check
         run: |
           echo "Running ESLint with GitHub annotations..."
           set +e  # Don't exit on ESLint failure
@@ -221,6 +251,7 @@ jobs:
               const fs = require('fs');
               const results = JSON.parse(fs.readFileSync('eslint_output.json', 'utf8'));
               
+              let hasErrors = false;
               results.forEach(result => {
                 result.messages.forEach(message => {
                   const file = result.filePath.replace(process.cwd() + '/', '');
@@ -230,36 +261,65 @@ jobs:
                   const ruleId = message.ruleId ? \` (\${message.ruleId})\` : '';
                   const messageText = message.message;
                   
+                  if (message.severity === 2) hasErrors = true;
+                  
                   console.log(\`::\${severity} title=ESLint\${ruleId},file=\${file},line=\${line},col=\${column}::\${file}:\${line}:\${column}: \${messageText}\`);
                 });
               });
             "
+            exit $ESLINT_EXIT_CODE
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **ESLint:** No issues found." >> $GITHUB_OUTPUT
+            exit 0
           fi
-          
-          # Exit with ESLint's original exit code
-          exit $ESLINT_EXIT_CODE
 
-      - name: Check TypeScript (with Annotations)
-        id: typescript_check
-        continue-on-error: true
+  check-typescript:
+    name: 'Check TypeScript'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+      summary: ${{ steps.check.outputs.summary }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up default TypeScript config
+        run: |
+          if [ ! -f "tsconfig.json" ]; then
+            echo '${{ env.DEFAULT_TS_CONFIG }}' > tsconfig.json
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install Dev Dependencies
+        run: |
+          npm install --only=dev
+
+      - name: Check TypeScript
+        id: check
         run: |
           echo "Running TypeScript check with GitHub annotations..."
           set +e  # Don't exit on TypeScript failure
-          
+
           # Check if tsconfig.json exists (it should, because we generated a default if missing)
           if [ ! -f "tsconfig.json" ]; then
             echo "::notice::No tsconfig.json found (unexpected), skipping TypeScript checks"
-            echo "typescript_available=false" >> $GITHUB_OUTPUT
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=⚠️ **TypeScript:** No tsconfig.json found, skipping checks." >> $GITHUB_OUTPUT
             exit 0
           fi
-          
-          echo "typescript_available=true" >> $GITHUB_OUTPUT
-          
+
           npx tsc --noEmit --pretty false > typescript_output.txt 2>&1
           TSC_EXIT_CODE=$?
 
           # Parse TypeScript output and generate GitHub annotations
-          if [ -f typescript_output.txt ]; then
+          if [ -f typescript_output.txt ] && [ -s typescript_output.txt ]; then
             while IFS= read -r line; do
               # Match pattern: file.ts(line,column): error TS2xxx: message
               if echo "$line" | grep -qE '^[^(]+\([0-9]+,[0-9]+\):'; then
@@ -269,7 +329,7 @@ jobs:
                 line_num=$(echo "$coords" | cut -d',' -f1)
                 col_num=$(echo "$coords" | cut -d',' -f2)
                 message=$(echo "$line" | sed -E 's/^[^(]+\([0-9]+,[0-9]+\): (error|warning) [A-Z0-9]+: //')
-                
+
                 # Determine if it's an error or warning
                 if echo "$line" | grep -q "error TS"; then
                   level="error"
@@ -278,24 +338,20 @@ jobs:
                   level="warning"
                   type="warning"
                 fi
-                
+
                 # Generate GitHub annotation
                 echo "::${level} title=TypeScript (${type}),file=${file},line=${line_num},col=${col_num}::${file}:${line_num}:${col_num}: ${type}: ${message}"
               fi
             done < typescript_output.txt
           fi
-          
+
+          if [ $TSC_EXIT_CODE -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=✅ **TypeScript:** No type errors found." >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **TypeScript:** Type errors found (see annotations for details)." >> $GITHUB_OUTPUT
+          fi
+
           # Exit with TypeScript's original exit code
           exit $TSC_EXIT_CODE
-
-      - name: Set Frontend Checks Outcome
-        id: outcome
-        if: always()
-        run: |
-          if [[ "${{ steps.prettier_format.outcome }}" == "failure" || "${{ steps.eslint_check.outcome }}" == "failure" || "${{ steps.typescript_check.outcome }}" == "failure" ]]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **Frontend Quality:** Checks failed (see annotations for details)." >> $GITHUB_OUTPUT
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Frontend Quality:** All checks passed." >> $GITHUB_OUTPUT
-          fi
