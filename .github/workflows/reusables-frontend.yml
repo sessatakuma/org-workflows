@@ -183,10 +183,6 @@ jobs:
               fi
             done
 
-            # Exit if there were any issues (files list not empty OR stderr has errors)
-            if [ -n "$files" ] || [ -s prettier_stderr.txt ]; then
-              exit 1
-            fi
             echo "status=failure" >> $GITHUB_OUTPUT
             echo "summary=❌ **Prettier:** Formatting issues found. Please review the annotations above." >> $GITHUB_OUTPUT
           else
