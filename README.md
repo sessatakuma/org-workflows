@@ -83,7 +83,7 @@ This checker will validate:
 ### Frontend Code Quality Checks
 This checker will validate:
 1. **Prettier Formatting Check**
-   - Runs prettier --check . to verify code formatting
+   - Runs prettier to verify code formatting
    - Generates GitHub annotations for files that need formatting
    - Provides helpful error messages with fix instructions
 2. **ESLint Linting Check**
@@ -92,8 +92,3 @@ This checker will validate:
    - Creates proper GitHub annotations with file, line, column info
    - Distinguishes between errors and warnings
    - Includes rule IDs in annotation titles
-3. **TypeScript Check**
-   - Checks for tsconfig.json existence
-   - Runs TypeScript compiler in check mode (tsc --noEmit)
-   - Parses TypeScript output format: file.ts(line,column): error TSxxxx:
-   - Generates annotations with proper error/warning levels
