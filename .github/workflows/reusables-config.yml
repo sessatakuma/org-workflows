@@ -67,7 +67,7 @@ jobs:
             2>/dev/null || true)
 
           if [ -z "$YAML_FILES" ]; then
-            MESSAGE="⚠️ **YAML Files:** No YAML files found to check"
+            MESSAGE="✅ **YAML Files:** No YAML files found to check"
             STATUS="success"
           else
             FILE_COUNT=$(echo "$YAML_FILES" | wc -l)
@@ -144,7 +144,7 @@ jobs:
             2>/dev/null || true)
 
           if [ -z "$JSON_FILES" ]; then
-            MESSAGE="⚠️ **JSON Files:** No JSON files found to check"
+            MESSAGE="✅ **JSON Files:** No JSON files found to check"
             STATUS="success"
           else
             FILE_COUNT=$(echo "$JSON_FILES" | wc -l)
@@ -218,7 +218,7 @@ jobs:
             2>/dev/null || true)
 
           if [ -z "$TOML_FILES" ]; then
-            MESSAGE="⚠️ **TOML Files:** No TOML files found to check"
+            MESSAGE="✅ **TOML Files:** No TOML files found to check"
             STATUS="success"
           else
             FILE_COUNT=$(echo "$TOML_FILES" | wc -l)
