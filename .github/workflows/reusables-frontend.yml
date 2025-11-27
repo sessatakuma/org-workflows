@@ -85,26 +85,7 @@ env:
             ]
         }
     ];
-  # DEFAULT_TS_CONFIG: |
-  #   {
-  #     "compilerOptions": {
-  #       "target": "es2020",
-  #       "module": "esnext",
-  #       "lib": ["es2020", "dom"],
-  #       "jsx": "react-jsx",
-  #       "strict": true,
-  #       "esModuleInterop": true,
-  #       "skipLibCheck": true,
-  #       "skipDefaultLibCheck": true,
-  #       "forceConsistentCasingInFileNames": true,
-  #       "moduleResolution": "node",
-  #       "noEmit": true,
-  #       "resolveJsonModule": true,
-  #       "types": ["node", "react", "react-dom"]
-  #     },
-  #     "include": ["src/**/*.ts", "src/**/*.tsx"],
-  #     "exclude": ["node_modules", "dist", "build"]
-  #   }
+
 
 jobs:
   check-prettier:
@@ -206,6 +187,8 @@ jobs:
             if [ -n "$files" ] || [ -s prettier_stderr.txt ]; then
               exit 1
             fi
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **Prettier:** Formatting issues found. Please review the annotations above." >> $GITHUB_OUTPUT
           else
             echo "status=success" >> $GITHUB_OUTPUT
             echo "summary=✅ **Prettier:** All files are properly formatted." >> $GITHUB_OUTPUT
@@ -273,91 +256,9 @@ jobs:
                 });
               });
             "
-            exit $ESLINT_EXIT_CODE
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=❌ **ESLint:** Issues found. Please review the annotations above." >> $GITHUB_OUTPUT
           else
             echo "status=success" >> $GITHUB_OUTPUT
             echo "summary=✅ **ESLint:** No issues found." >> $GITHUB_OUTPUT
-            exit 0
           fi
-
-  # check-typescript:
-  #   name: 'Check TypeScript'
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     status: ${{ steps.check.outputs.status }}
-  #     summary: ${{ steps.check.outputs.summary }}
-  #   steps:
-  #     - name: Check out repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: ${{ github.head_ref }}
-
-  #     - name: Set up default TypeScript config
-  #       run: |
-  #         if [ ! -f "tsconfig.json" ]; then
-  #           echo '${{ env.DEFAULT_TS_CONFIG }}' > tsconfig.json
-  #         fi
-
-  #     - name: Set up Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: ${{ inputs.node-version }}
-
-  #     - name: Install Dev Dependencies
-  #       run: |
-  #         npm install --only=dev
-
-  #     - name: Check TypeScript
-  #       id: check
-  #       run: |
-  #         echo "Running TypeScript check with GitHub annotations..."
-  #         set +e  # Don't exit on TypeScript failure
-
-  #         # Check if tsconfig.json exists (it should, because we generated a default if missing)
-  #         if [ ! -f "tsconfig.json" ]; then
-  #           echo "::notice::No tsconfig.json found (unexpected), skipping TypeScript checks"
-  #           echo "status=success" >> $GITHUB_OUTPUT
-  #           echo "summary=⚠️ **TypeScript:** No tsconfig.json found, skipping checks." >> $GITHUB_OUTPUT
-  #           exit 0
-  #         fi
-
-  #         npx tsc --noEmit --pretty false > typescript_output.txt 2>&1
-  #         TSC_EXIT_CODE=$?
-
-  #         # Parse TypeScript output and generate GitHub annotations
-  #         if [ -f typescript_output.txt ] && [ -s typescript_output.txt ]; then
-  #           while IFS= read -r line; do
-  #             # Match pattern: file.ts(line,column): error TS2xxx: message
-  #             if echo "$line" | grep -qE '^[^(]+\([0-9]+,[0-9]+\):'; then
-  #               # Extract file, line, column, and message
-  #               file=$(echo "$line" | sed -E 's/^([^(]+)\([0-9]+,[0-9]+\):.*/\1/')
-  #               coords=$(echo "$line" | sed -E 's/^[^(]+\(([0-9]+,[0-9]+)\):.*/\1/')
-  #               line_num=$(echo "$coords" | cut -d',' -f1)
-  #               col_num=$(echo "$coords" | cut -d',' -f2)
-  #               message=$(echo "$line" | sed -E 's/^[^(]+\([0-9]+,[0-9]+\): (error|warning) [A-Z0-9]+: //')
-
-  #               # Determine if it's an error or warning
-  #               if echo "$line" | grep -q "error TS"; then
-  #                 level="error"
-  #                 type="error"
-  #               else
-  #                 level="warning"
-  #                 type="warning"
-  #               fi
-
-  #               # Generate GitHub annotation
-  #               echo "::${level} title=TypeScript (${type}),file=${file},line=${line_num},col=${col_num}::${file}:${line_num}:${col_num}: ${type}: ${message}"
-  #             fi
-  #           done < typescript_output.txt
-  #         fi
-
-  #         if [ $TSC_EXIT_CODE -eq 0 ]; then
-  #           echo "status=success" >> $GITHUB_OUTPUT
-  #           echo "summary=✅ **TypeScript:** No type errors found." >> $GITHUB_OUTPUT
-  #         else
-  #           echo "status=failure" >> $GITHUB_OUTPUT
-  #           echo "summary=❌ **TypeScript:** Type errors found (see annotations for details)." >> $GITHUB_OUTPUT
-  #         fi
-
-  #         # Exit with TypeScript's original exit code
-  #         exit $TSC_EXIT_CODE
