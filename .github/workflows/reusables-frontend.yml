@@ -25,12 +25,6 @@ on:
       eslint-summary:
         description: "A summary of the ESLint check."
         value: ${{ jobs.check-eslint.outputs.summary }}
-      # typescript-status:
-      #   description: "The status of the TypeScript check."
-      #   value: ${{ jobs.check-typescript.outputs.status }}
-      # typescript-summary:
-      #   description: "A summary of the TypeScript check."
-      #   value: ${{ jobs.check-typescript.outputs.summary }}
 
 permissions:
   contents: read
@@ -123,66 +117,18 @@ jobs:
         id: check
         run: |
           echo "Running prettier format check..."
-          if ! npx prettier --check .; then
-            echo "Prettier formatting issues found. Run 'npm run format' to fix them."
+          set +e  # Don't exit on prettier failure
+          npx prettier --check ./src 2>&1 | tee prettier_output.txt
+          PRETTIER_EXIT_CODE=$?
+          set -e
 
-            # Get list of files that need formatting and capture stderr for syntax errors
-            # Use || true to prevent exit on syntax errors (exit code 2)
-            files=$(npx prettier --list-different . 2> prettier_stderr.txt || true)
-
-            # Generate GitHub annotations for syntax errors from stderr
-            if [ -f prettier_stderr.txt ]; then
-              # Grep for [error] lines, but ensure we don't fail if none found
-              # Also capture "JSON Error" and other types, not just "SyntaxError"
-              grep "\[error\]" prettier_stderr.txt | while read -r line; do
-                # Extract file and message
-                # Format: [error] file: ErrorType: message
-                # Or: [error] ErrorType in file:
-
-                # Simple extraction: everything after [error]
-                message=$(echo "$line" | sed 's/^\[error\] //')
-
-                # Try to extract filename if it appears at the start
-                # Pattern: [error] filename: ...
-                possible_file=$(echo "$message" | cut -d':' -f1)
-
-                if [ -f "$possible_file" ]; then
-                   echo "::error title=Prettier Error,file=${possible_file}::${message}"
-                else
-                   # Fallback: just output the error without file association if we can't parse it easily
-                   # or if it's a general error
-                   echo "::error title=Prettier Error::${message}"
-                fi
-              done || true
-            fi
-
-            # Generate GitHub annotations for formatting issues
-            for file in $files; do
+          if [ $PRETTIER_EXIT_CODE -ne 0 ]; then
+            # Extract filenames from prettier output and generate annotations
+            grep -E "^\S+\.(js|jsx|ts|tsx|json|css|scss|md|yaml|yml)$" prettier_output.txt | while read -r file; do
               if [ -f "$file" ]; then
-                # Generate formatted version to compare
-                npx prettier "$file" > "${file}.formatted" 2>/dev/null || true
-
-                if [ ! -f "${file}.formatted" ]; then
-                   continue
-                fi
-
-                # Find the first line that differs
-                # diff output format: @@ -start,len +start,len @@ or @@ -start +start @@
-                # We extract the start line of the first hunk
-                line_num=$(diff -u "$file" "${file}.formatted" | grep -m 1 "^@@" | sed 's/^@@ -\([0-9]*\).*/\1/')
-
-                # Default to line 1 if detection fails
-                if [ -z "$line_num" ]; then
-                  line_num=1
-                fi
-
-                echo "::error title=Prettier Formatting,file=${file},line=${line_num}::${file}:${line_num}: File needs formatting. Run 'npm run format' to fix."
-
-                # Clean up
-                rm "${file}.formatted"
+                echo "::error title=Prettier Formatting,file=${file},line=1,col=1::File needs formatting. Run 'npm run format' to fix."
               fi
             done
-
             echo "status=failure" >> $GITHUB_OUTPUT
             echo "summary=❌ **Prettier:** Formatting issues found. Please review the annotations above." >> $GITHUB_OUTPUT
           else
