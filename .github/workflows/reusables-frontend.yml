@@ -198,6 +198,9 @@ jobs:
                 });
               });
             "
+          fi
+
+          if [ $ESLINT_EXIT_CODE -ne 0 ]; then
             echo "status=failure" >> $GITHUB_OUTPUT
             echo "summary=❌ **ESLint:** Issues found. Please review the annotations above." >> $GITHUB_OUTPUT
           else
