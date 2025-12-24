@@ -104,10 +104,10 @@ jobs:
           python-version: ${{ inputs.python-version }}
           
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        uses: astral-sh/setup-uv@v7
 
-      - name: Add uv to PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      # - name: Add uv to PATH
+      #  run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install Dependencies and Linters
         run: |
