@@ -1,6 +1,7 @@
+---
 name: 'Frontend Code Quality Checks'
 
-on:
+'on':
   workflow_call:
     inputs:
       node-version:
@@ -96,7 +97,8 @@ jobs:
 
       - name: Set up default Prettier config
         run: |
-          if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && [ ! -f "prettier.config.js" ]; then
+          if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && \
+             [ ! -f "prettier.config.js" ]; then
             echo '${{ env.DEFAULT_PRETTIER_CONFIG }}' > .prettierrc.json
           fi
 
@@ -115,26 +117,7 @@ jobs:
 
       - name: Check Prettier Formatter
         id: check
-        run: |
-          echo "Running prettier format check..."
-          set +e  # Don't exit on prettier failure
-          npx prettier --check ./src 2>&1 | tee prettier_output.txt
-          PRETTIER_EXIT_CODE=$?
-          set -e
-
-          if [ $PRETTIER_EXIT_CODE -ne 0 ]; then
-            # Extract filenames from prettier output and generate annotations
-            grep -E "^\S+\.(js|jsx|ts|tsx|json|css|scss|md|yaml|yml)$" prettier_output.txt | while read -r file; do
-              if [ -f "$file" ]; then
-                echo "::error title=Prettier Formatting,file=${file},line=1,col=1::File needs formatting. Run 'npm run format' to fix."
-              fi
-            done
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **Prettier:** Formatting issues found. Please review the annotations above." >> $GITHUB_OUTPUT
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Prettier:** All files are properly formatted." >> $GITHUB_OUTPUT
-          fi
+        run: .github/scripts/check-prettier.sh
 
   check-eslint:
     name: 'Check ESLint'
@@ -150,7 +133,9 @@ jobs:
 
       - name: Set up default ESLint config
         run: |
-          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.mjs" ]; then
+          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && \
+             [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && \
+             [ ! -f "eslint.config.mjs" ]; then
             echo '${{ env.DEFAULT_ESLINT_CONFIG }}' > eslint.config.mjs
           fi
 
@@ -170,40 +155,4 @@ jobs:
 
       - name: Check ESLint
         id: check
-        run: |
-          echo "Running ESLint with GitHub annotations..."
-          set +e  # Don't exit on ESLint failure
-          npx eslint ./src --format json --output-file eslint_output.json
-          ESLINT_EXIT_CODE=$?
-
-          # Parse ESLint JSON output and generate GitHub annotations
-          if [ -f eslint_output.json ]; then
-            node -e "
-              const fs = require('fs');
-              const results = JSON.parse(fs.readFileSync('eslint_output.json', 'utf8'));
-              
-              let hasErrors = false;
-              results.forEach(result => {
-                result.messages.forEach(message => {
-                  const file = result.filePath.replace(process.cwd() + '/', '');
-                  const line = message.line || 1;
-                  const column = message.column || 1;
-                  const severity = message.severity === 2 ? 'error' : 'warning';
-                  const ruleId = message.ruleId ? \` (\${message.ruleId})\` : '';
-                  const messageText = message.message;
-                  
-                  if (message.severity === 2) hasErrors = true;
-                  
-                  console.log(\`::\${severity} title=ESLint\${ruleId},file=\${file},line=\${line},col=\${column}::\${file}:\${line}:\${column}: \${messageText}\`);
-                });
-              });
-            "
-          fi
-
-          if [ $ESLINT_EXIT_CODE -ne 0 ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **ESLint:** Issues found. Please review the annotations above." >> $GITHUB_OUTPUT
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **ESLint:** No issues found." >> $GITHUB_OUTPUT
-          fi
+        run: .github/scripts/parse-eslint-json.sh
