@@ -1,3 +1,4 @@
+---
 name: 'Organization Quality Checks Orchestrator'
 
 on:
@@ -28,6 +29,21 @@ on:
         required: false
         type: boolean
         default: false
+      run-go-checks:
+        description: 'Whether to run the Golang code quality checks.'
+        required: false
+        type: boolean
+        default: false
+      go-version:
+        description: 'The Go version to use.'
+        required: false
+        type: string
+        default: 'stable'
+      go-working-directory:
+        description: 'Working directory for Go checks.'
+        required: false
+        type: string
+        default: '.'
     secrets:
       CHECKER_TOKEN:
         description: 'The GITHUB_TOKEN passed from the caller.'
@@ -70,6 +86,16 @@ jobs:
     secrets:
       CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
 
+  call-go-checks:
+    name: Run Go Quality Checks
+    if: inputs.run-go-checks
+    uses: ./.github/workflows/reusables-go.yml
+    with:
+      go-version: ${{ inputs.go-version }}
+      working-directory: ${{ inputs.go-working-directory }}
+    secrets:
+      CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
+
   report-summary:
     name: Report Overall Summary
     runs-on: ubuntu-latest
@@ -78,7 +104,8 @@ jobs:
       - call-python-checks
       - call-config-checks
       - call-frontend-checks
-    if: always() # This job runs even if previous jobs fail
+      - call-go-checks
+    if: always()  # This job runs even if previous jobs fail
     steps:
       - name: Build and Post Comment
         id: build_comment
@@ -95,7 +122,7 @@ jobs:
 
             // Helper to check job status
             const wasJobRun = (job) => job && job.result !== 'skipped';
-            
+
             // Helper to safely get output value
             const getOutput = (outputs, key, defaultValue = 'N/A') => {
               return outputs?.[key] || defaultValue;
@@ -105,22 +132,33 @@ jobs:
             if (wasJobRun(needs['call-basic-checks'])) {
               anyJobRan = true;
               const { outputs } = needs['call-basic-checks'];
-              
+
               // Only add summaries if they exist
               if (outputs) {
-                comment_body += getOutput(outputs, 'pr-title-summary', '⚠️ **PR Title:** No output received') + "\n";
-                comment_body += getOutput(outputs, 'branch-name-summary', '⚠️ **Branch Name:** No output received') + "\n";
-                comment_body += getOutput(outputs, 'commit-messages-summary', '⚠️ **Commit Messages:** No output received') + "\n";
-                comment_body += getOutput(outputs, 'conflicts-summary', '⚠️ **Conflicts:** No output received') + "\n";
-                
+                const prTitleSum = 'pr-title-summary';
+                const branchNameSum = 'branch-name-summary';
+                const commitMsgSum = 'commit-messages-summary';
+                const conflictsSum = 'conflicts-summary';
+
+                comment_body += getOutput(outputs, prTitleSum,
+                  '⚠️ **PR Title:** No output received') + "\n";
+                comment_body += getOutput(outputs, branchNameSum,
+                  '⚠️ **Branch Name:** No output received') + "\n";
+                comment_body += getOutput(outputs, commitMsgSum,
+                  '⚠️ **Commit Messages:** No output received') + "\n";
+                comment_body += getOutput(outputs, conflictsSum,
+                  '⚠️ **Conflicts:** No output received') + "\n";
+
                 if (getOutput(outputs, 'pr-title-status') === 'failure' ||
                     getOutput(outputs, 'branch-name-status') === 'failure' ||
-                    getOutput(outputs, 'commit-messages-status') === 'failure' ||
+                    getOutput(outputs, 'commit-messages-status')
+                      === 'failure' ||
                     getOutput(outputs, 'conflicts-status') === 'failure') {
                   all_passed = false;
                 }
               } else {
-                comment_body += "⚠️ **Basic Checks:** Completed but no outputs received\n";
+                comment_body += "⚠️ **Basic Checks:** " +
+                  "Completed but no outputs received\n";
               }
             }
 
@@ -128,14 +166,16 @@ jobs:
             if (wasJobRun(needs['call-python-checks'])) {
               anyJobRan = true;
               const { outputs } = needs['call-python-checks'];
-              
+
               if (outputs) {
-                comment_body += getOutput(outputs, 'python-summary', '⚠️ **Python Quality:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'python-summary',
+                  '⚠️ **Python Quality:** No output received') + "\n";
                 if (getOutput(outputs, 'python-status') === 'failure') {
                   all_passed = false;
                 }
               } else {
-                comment_body += "⚠️ **Python Checks:** Completed but no outputs received\n";
+                comment_body += "⚠️ **Python Checks:** " +
+                  "Completed but no outputs received\n";
               }
             }
 
@@ -143,19 +183,23 @@ jobs:
             if (wasJobRun(needs['call-config-checks'])) {
               anyJobRan = true;
               const { outputs } = needs['call-config-checks'];
-              
+
               if (outputs) {
-                comment_body += getOutput(outputs, 'yaml-summary', '⚠️ **YAML Files:** No output received') + "\n";
-                comment_body += getOutput(outputs, 'json-summary', '⚠️ **JSON Files:** No output received') + "\n";
-                comment_body += getOutput(outputs, 'toml-summary', '⚠️ **TOML Files:** No output received') + "\n";
-                
+                comment_body += getOutput(outputs, 'yaml-summary',
+                  '⚠️ **YAML Files:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'json-summary',
+                  '⚠️ **JSON Files:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'toml-summary',
+                  '⚠️ **TOML Files:** No output received') + "\n";
+
                 if (getOutput(outputs, 'yaml-status') === 'failure' ||
                     getOutput(outputs, 'json-status') === 'failure' ||
                     getOutput(outputs, 'toml-status') === 'failure') {
                   all_passed = false;
                 }
               } else {
-                comment_body += "⚠️ **Config Checks:** Completed but no outputs received\n";
+                comment_body += "⚠️ **Config Checks:** " +
+                  "Completed but no outputs received\n";
               }
             }
 
@@ -163,39 +207,67 @@ jobs:
             if (wasJobRun(needs['call-frontend-checks'])) {
               anyJobRan = true;
               const { outputs } = needs['call-frontend-checks'];
-              
+
               if (outputs) {
-              comment_body += getOutput(outputs, 'prettier-summary', '⚠️ **Prettier:** No output received') + "\n";
-              comment_body += getOutput(outputs, 'eslint-summary', '⚠️ **ESLint:** No output received') + "\n";
-              // comment_body += getOutput(outputs, 'typescript-summary', '⚠️ **TypeScript:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'prettier-summary',
+                  '⚠️ **Prettier:** No output received') + "\n";
+                comment_body += getOutput(outputs, 'eslint-summary',
+                  '⚠️ **ESLint:** No output received') + "\n";
+                // comment_body += getOutput(outputs, 'typescript-summary',
+                //   '⚠️ **TypeScript:** No output received') + "\n";
                 if (getOutput(outputs, 'prettier-status') === 'failure' ||
                     getOutput(outputs, 'eslint-status') === 'failure' ) {
                     // getOutput(outputs, 'typescript-status') === 'failure') {
                   all_passed = false;
                 }
               } else {
-                comment_body += "⚠️ **Frontend Checks:** Completed but no outputs received\n";
+                comment_body += "⚠️ **Frontend Checks:** " +
+                  "Completed but no outputs received\n";
               }
             }
-            
+
+            // --- Go Checks ---
+            if (wasJobRun(needs['call-go-checks'])) {
+              anyJobRan = true;
+              const { outputs } = needs['call-go-checks'];
+
+              if (outputs) {
+                comment_body += getOutput(outputs, 'go-summary',
+                  '⚠️ **Go Quality:** No output received') + "\n";
+                if (getOutput(outputs, 'go-status') === 'failure') {
+                  all_passed = false;
+                }
+              } else {
+                comment_body += "⚠️ **Go Checks:** " +
+                  "Completed but no outputs received\n";
+              }
+            }
+
             // --- Detailed Reports ---
-            if (wasJobRun(needs['call-basic-checks']) && 
-                needs['call-basic-checks']?.outputs?.['commit-messages-status'] === 'failure') {
-              const report = needs['call-basic-checks']?.outputs?.['commit-messages-report'];
+            if (wasJobRun(needs['call-basic-checks']) &&
+                needs['call-basic-checks']?.outputs?.['commit-messages-status']
+                  === 'failure') {
+              const report = needs['call-basic-checks']?.outputs?.[
+                'commit-messages-report'
+              ];
               if (report) {
-                comment_body += `\n<details><summary>📋 Click for detailed commit validation report</summary>\n\n\`\`\`\n${report}\n\`\`\`\n\n</details>\n`;
+                comment_body += `\n<details><summary>📋 Click for detailed ` +
+                  `commit validation report</summary>\n\n\`\`\`\n${report}` +
+                  `\n\`\`\`\n\n</details>\n`;
               }
             }
-            
+
             // --- Final Status ---
             comment_body += "\n---\n";
-            
+
             if (!anyJobRan) {
-              comment_body += "⚠️ **No checks were executed.** Both check suites were skipped or disabled.";
+              comment_body += "⚠️ **No checks were executed.** " +
+                "Both check suites were skipped or disabled.";
             } else if (all_passed) {
               comment_body += "🎉 **All checks passed!**";
             } else {
-              comment_body += "⚠️ **Please fix the failing checks (❌) before merging.**";
+              comment_body += "⚠️ **Please fix the failing checks (❌) " +
+                "before merging.**";
             }
 
             // --- Update or Create Comment ---
@@ -205,10 +277,11 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
               });
-              const botComment = comments.data.find(comment => 
-                comment.user.type === 'Bot' && comment.body.includes('🛡️ PR Quality Check Summary')
+              const botComment = comments.data.find(comment =>
+                comment.user.type === 'Bot' &&
+                comment.body.includes('🛡️ PR Quality Check Summary')
               );
-              
+
               // 1. 如果找到舊留言，就刪除它
               if (botComment) {
                 await github.rest.issues.deleteComment({
@@ -233,11 +306,12 @@ jobs:
               console.error('Comment body that failed to post:', comment_body);
               throw error;
             }
-            
+
             core.setOutput('all_passed', all_passed);
 
       - name: Fail workflow if any check failed
         if: steps.build_comment.outputs.all_passed == 'false'
         run: |
-          echo "❌ One or more PR quality checks failed. See summary comment for details."
+          echo "❌ One or more PR quality checks failed. " \
+               "See summary comment for details."
           exit 1
