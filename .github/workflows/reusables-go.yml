@@ -62,6 +62,7 @@ jobs:
         shell: bash
         run: |
           WORKDIR="${{ inputs.working-directory }}"
+<<<<<<< HEAD
           CONFIG_FILES="golangci.yml golangci.yaml golangci.toml"
           NO_CONFIG=true
           for f in $CONFIG_FILES; do
@@ -71,6 +72,9 @@ jobs:
             fi
           done
           if $NO_CONFIG; then
+=======
+          if [ ! -f "$WORKDIR/.golangci.yml" ] && [ ! -f "$WORKDIR/.golangci.yaml" ] && [ ! -f "$WORKDIR/.golangci.toml" ]; then
+>>>>>>> c0993e4 (feat(go): add reusable Go quality checks workflow)
             echo "$DEFAULT_GOLANGCI_CONFIG" > "$WORKDIR/.golangci.yml"
           fi
 
@@ -82,7 +86,11 @@ jobs:
         run: |
           go mod tidy
           if [ -n "$(git status --porcelain)" ]; then
+<<<<<<< HEAD
             echo "::error::go.mod/go.sum are dirty, please run 'go mod tidy'"
+=======
+            echo "::error title=Go Mod Tidy::go.mod/go.sum are dirty, please run 'go mod tidy'"
+>>>>>>> c0993e4 (feat(go): add reusable Go quality checks workflow)
             exit 1
           fi
 
@@ -105,8 +113,12 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         continue-on-error: true
         run: |
+<<<<<<< HEAD
           GOTESTSUM_BIN="$(go env GOPATH)/bin/gotestsum"
           $GOTESTSUM_BIN --junitfile test-results.xml -- -race ./...
+=======
+          $(go env GOPATH)/bin/gotestsum --junitfile test-results.xml -- -race ./...
+>>>>>>> c0993e4 (feat(go): add reusable Go quality checks workflow)
 
       - name: Publish Test Results
         uses: mikepenz/action-junit-report@v4
@@ -127,8 +139,23 @@ jobs:
         if: always()
         shell: bash
         run: |
+<<<<<<< HEAD
           .github/scripts/go-check-outcome.sh \
             "${{ steps.tidy.outcome }}" \
             "${{ steps.lint.outcome }}" \
             "${{ steps.test.outcome }}" \
             "${{ steps.build.outcome }}"
+=======
+          TIDY_STATUS="${{ steps.tidy.outcome }}"
+          LINT_STATUS="${{ steps.lint.outcome }}"
+          TEST_STATUS="${{ steps.test.outcome }}"
+          BUILD_STATUS="${{ steps.build.outcome }}"
+
+          if [ "$TIDY_STATUS" = "success" ] && [ "$LINT_STATUS" = "success" ] && [ "$TEST_STATUS" = "success" ] && [ "$BUILD_STATUS" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "summary=All Go checks passed (tidy, lint, test, build)" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "summary=Some Go checks failed: tidy=$TIDY_STATUS, lint=$LINT_STATUS, test=$TEST_STATUS, build=$BUILD_STATUS" >> $GITHUB_OUTPUT
+          fi
+>>>>>>> c0993e4 (feat(go): add reusable Go quality checks workflow)
