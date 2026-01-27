@@ -14,6 +14,9 @@ To apply workflows, please set the following arguments in `with` section:
 | `python-version` | The Python version to use for the Python checks. | `string` | `'3.11'` |
 | `run-config-checks` | Whether to run the configuration files quality checks. | `boolean` | `false` |
 | `run-frontend-checks` | Whether to run the frontend code quality checks. | `boolean` | `false` |
+| `run-go-checks` | Whether to run the Golang code quality checks. | `boolean` | `false` |
+| `go-version` | The Go version to use. | `string` | `'stable'` |
+| `go-working-directory` | Working directory for Go checks. | `string` | `'.'` |
 
 ## Checking details
 ### Basic PR Quality Checks
@@ -59,6 +62,27 @@ This checker will validate:
    - Distinguishes between errors, warnings, and informational notes
 
 **Note:** Python checks create comprehensive inline annotations on your PR with precise file locations, making it easy to identify and fix issues directly from the GitHub interface.
+
+### Go Code Quality Checks
+This checker will validate:
+1. **Go Mod Tidy Check**
+   - Verifies that `go.mod` and `go.sum` are in sync
+   - Detects missing or unused dependencies
+   - Ensures reproducible builds
+2. **golangci-lint Analysis**
+   - Runs comprehensive static analysis with multiple linters
+   - Generates GitHub annotations for code issues
+   - Checks for common Go anti-patterns and bugs
+3. **Go Test with Race Detector**
+   - Executes all tests with `-race` flag enabled
+   - Detects data races in concurrent code
+   - Reports test failures with detailed output
+4. **Build Verification**
+   - Verifies that all packages compile successfully
+   - Catches syntax errors and type mismatches
+   - Ensures the codebase is in a buildable state
+
+**Note:** Go checks create inline annotations on your PR for linting issues, making it easy to identify and fix problems directly from the GitHub interface.
 
 ### Configuration Files Quality Checks
 This checker will validate:

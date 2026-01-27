@@ -1,7 +1,7 @@
 ## 📄 如何新增一個全新的檢查類別
 
 > [!WARNING]
-> Half written by gemini 2.5 pro.
+> Half written by claude-opus-4-5-thinking.
 
 假設您想新增一個「文件拼寫檢查」（Doc Linting）類別，並希望它像 `run-python-checks` 一樣可以被開啟或關閉。
 
@@ -81,6 +81,33 @@ jobs:
           else
             echo "summary=❌ **Docs Linting:** Found spelling errors." >> $GITHUB_OUTPUT
           fi
+```
+
+#### 開發規範
+
+##### yamllint 合規
+所有 workflow 檔案必須通過 `yamllint` 檢查。常見注意事項：
+- 檔案開頭加 `---`
+- 避免行尾空白
+- 確保檔案結尾有換行符
+
+> [!TIP]
+> `on:` 關鍵字會觸發 yamllint 的 truthy 警告，建議使用：
+> ```yaml
+> on:  # yamllint disable-line rule:truthy
+> ```
+
+##### 外部腳本
+當 shell 指令較為複雜（例如包含迴圈、條件判斷、多行邏輯）時，應提取至 `.github/scripts/` 目錄：
+- 腳本需為可執行檔（`chmod +x`）
+- 透過 `env:` 區塊傳遞 workflow expressions 給腳本
+- 輸出寫入 `$GITHUB_OUTPUT`
+
+```yaml
+- name: Check Something
+  env:
+    MY_VAR: ${{ github.event.pull_request.title }}
+  run: .github/scripts/check-something.sh
 ```
 
 -----
