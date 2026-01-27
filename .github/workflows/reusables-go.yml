@@ -1,3 +1,4 @@
+---
 name: Reusable Go Checks
 
 on:
@@ -61,7 +62,15 @@ jobs:
         shell: bash
         run: |
           WORKDIR="${{ inputs.working-directory }}"
-          if [ ! -f "$WORKDIR/.golangci.yml" ] && [ ! -f "$WORKDIR/.golangci.yaml" ] && [ ! -f "$WORKDIR/.golangci.toml" ]; then
+          CONFIG_FILES="golangci.yml golangci.yaml golangci.toml"
+          NO_CONFIG=true
+          for f in $CONFIG_FILES; do
+            if [ -f "$WORKDIR/.$f" ]; then
+              NO_CONFIG=false
+              break
+            fi
+          done
+          if $NO_CONFIG; then
             echo "$DEFAULT_GOLANGCI_CONFIG" > "$WORKDIR/.golangci.yml"
           fi
 
@@ -73,7 +82,7 @@ jobs:
         run: |
           go mod tidy
           if [ -n "$(git status --porcelain)" ]; then
-            echo "::error title=Go Mod Tidy::go.mod/go.sum are dirty, please run 'go mod tidy'"
+            echo "::error::go.mod/go.sum are dirty, please run 'go mod tidy'"
             exit 1
           fi
 
@@ -96,7 +105,8 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         continue-on-error: true
         run: |
-          $(go env GOPATH)/bin/gotestsum --junitfile test-results.xml -- -race ./...
+          GOTESTSUM_BIN="$(go env GOPATH)/bin/gotestsum"
+          $GOTESTSUM_BIN --junitfile test-results.xml -- -race ./...
 
       - name: Publish Test Results
         uses: mikepenz/action-junit-report@v4
@@ -122,10 +132,21 @@ jobs:
           TEST_STATUS="${{ steps.test.outcome }}"
           BUILD_STATUS="${{ steps.build.outcome }}"
 
-          if [ "$TIDY_STATUS" = "success" ] && [ "$LINT_STATUS" = "success" ] && [ "$TEST_STATUS" = "success" ] && [ "$BUILD_STATUS" = "success" ]; then
+          ALL_PASSED=true
+          for status in "$TIDY_STATUS" "$LINT_STATUS" \
+            "$TEST_STATUS" "$BUILD_STATUS"; do
+            if [ "$status" != "success" ]; then
+              ALL_PASSED=false
+              break
+            fi
+          done
+
+          if $ALL_PASSED; then
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=All Go checks passed (tidy, lint, test, build)" >> $GITHUB_OUTPUT
+            echo "summary=All Go checks passed" >> $GITHUB_OUTPUT
           else
             echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=Some Go checks failed: tidy=$TIDY_STATUS, lint=$LINT_STATUS, test=$TEST_STATUS, build=$BUILD_STATUS" >> $GITHUB_OUTPUT
+            MSG="Go checks failed: t=$TIDY_STATUS,l=$LINT_STATUS,"
+            MSG="${MSG}t=$TEST_STATUS,b=$BUILD_STATUS"
+            echo "summary=$MSG" >> $GITHUB_OUTPUT
           fi
