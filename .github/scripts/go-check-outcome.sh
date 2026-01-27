@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Go Checks Outcome Script
 # Aggregates results from tidy, lint, test, and build steps
 
