@@ -1,6 +1,7 @@
+---
 name: 'Configuration Files Quality Checks'
 
-on:
+'on':
   workflow_call:
     secrets:
       CHECKER_TOKEN:
@@ -57,60 +58,7 @@ jobs:
 
       - name: Find and Check YAML Files
         id: check
-        run: |
-          # Find all YAML files (*.yml, *.yaml) excluding node_modules and .git
-          YAML_FILES=$(find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
-            ! -path "*/node_modules/*" \
-            ! -path "*/.git/*" \
-            ! -path "*/venv/*" \
-            ! -path "*/.venv/*" \
-            2>/dev/null || true)
-
-          if [ -z "$YAML_FILES" ]; then
-            MESSAGE="✅ **YAML Files:** No YAML files found to check"
-            STATUS="success"
-          else
-            FILE_COUNT=$(echo "$YAML_FILES" | wc -l)
-            
-            # Run yamllint with relaxed configuration
-            set +e
-            YAMLLINT_OUTPUT=$(echo "$YAML_FILES" | xargs uv run yamllint -f parsable 2>&1)
-            YAMLLINT_EXIT=$?
-            set -e
-
-            if [ $YAMLLINT_EXIT -eq 0 ]; then
-              MESSAGE="✅ **YAML Files:** All $FILE_COUNT file(s) passed validation"
-              STATUS="success"
-            else
-              # Count failed files
-              FAILED_COUNT=$(echo "$YAMLLINT_OUTPUT" | cut -d':' -f1 | sort -u | wc -l)
-              # Get first failed file for summary
-              FIRST_FAILED=$(echo "$YAMLLINT_OUTPUT" | head -n 1 | cut -d':' -f1)
-              
-              MESSAGE="❌ **YAML Files:** Found issues in $FAILED_COUNT of $FILE_COUNT file(s) (e.g., \`$FIRST_FAILED\`)"
-              STATUS="failure"
-              
-              # Show errors in GitHub annotations
-              echo "$YAMLLINT_OUTPUT" | while IFS=: read -r file line col level msg; do
-                if [ -n "$file" ] && [ -n "$line" ]; then
-                  # Clean up level (remove brackets)
-                  clean_level=$(echo "$level" | tr -d '[]' | xargs)
-                  # Map yamllint level to GitHub annotation level
-                  if [ "$clean_level" = "warning" ]; then
-                    gh_level="warning"
-                  else
-                    gh_level="error"
-                  fi
-                  echo "::${gh_level} file=${file},line=${line},col=${col}::${msg}"
-                fi
-              done
-            fi
-          fi
-
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-          } >> "$GITHUB_OUTPUT"
+        run: .github/scripts/check-yaml-files.sh
 
   check-json:
     name: 'Check JSON Files'
@@ -131,62 +79,7 @@ jobs:
 
       - name: Find and Check JSON Files
         id: check
-        run: |
-          # Find all JSON files excluding node_modules and .git
-          JSON_FILES=$(find . -type f -name "*.json" \
-            ! -path "*/node_modules/*" \
-            ! -path "*/.git/*" \
-            ! -path "*/venv/*" \
-            ! -path "*/.venv/*" \
-            ! -path "*/.next/*" \
-            ! -path "*/dist/*" \
-            ! -path "*/build/*" \
-            2>/dev/null || true)
-
-          if [ -z "$JSON_FILES" ]; then
-            MESSAGE="✅ **JSON Files:** No JSON files found to check"
-            STATUS="success"
-          else
-            FILE_COUNT=$(echo "$JSON_FILES" | wc -l)
-            FAILED_FILES=""
-            FAILED_COUNT=0
-
-            # Check each JSON file
-            while IFS= read -r file; do
-              if ! jq empty "$file" >/dev/null 2>&1; then
-                FAILED_COUNT=$((FAILED_COUNT + 1))
-                if [ -z "$FAILED_FILES" ]; then
-                  FAILED_FILES="$file"
-                fi
-                # Get error details
-                ERROR_OUTPUT=$(jq empty "$file" 2>&1 || true)
-                
-                # Extract line and column if possible
-                # Example: parse error: ... at line 10, column 20
-                if echo "$ERROR_OUTPUT" | grep -q "at line [0-9]\+, column [0-9]\+"; then
-                  line=$(echo "$ERROR_OUTPUT" | grep -o "at line [0-9]\+" | grep -o "[0-9]\+")
-                  col=$(echo "$ERROR_OUTPUT" | grep -o "column [0-9]\+" | grep -o "[0-9]\+")
-                  msg=$(echo "$ERROR_OUTPUT" | sed -E 's/.*: (.*) at line.*/\1/')
-                  echo "::error file=${file},line=${line},col=${col}::${msg}"
-                else
-                  echo "::error file=${file}::JSON validation failed: ${ERROR_OUTPUT}"
-                fi
-              fi
-            done <<< "$JSON_FILES"
-
-            if [ $FAILED_COUNT -eq 0 ]; then
-              MESSAGE="✅ **JSON Files:** All $FILE_COUNT file(s) are valid"
-              STATUS="success"
-            else
-              MESSAGE="❌ **JSON Files:** $FAILED_COUNT of $FILE_COUNT file(s) failed validation (e.g., \`$FAILED_FILES\`)"
-              STATUS="failure"
-            fi
-          fi
-
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-          } >> "$GITHUB_OUTPUT"
+        run: .github/scripts/check-json-files.sh
 
   check-toml:
     name: 'Check TOML Files'
@@ -202,70 +95,11 @@ jobs:
 
       - name: Install taplo-cli
         run: |
-          # Install taplo using the official installation script
-          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-x86_64.gz \
+          # Install taplo
+          BASE_URL="https://github.com/tamasfe/taplo/releases/latest/download"
+          curl -fsSL "${BASE_URL}/taplo-full-linux-x86_64.gz" \
             | gzip -d - | install -m 755 /dev/stdin /usr/local/bin/taplo
 
       - name: Find and Check TOML Files
         id: check
-        run: |
-          # Find all TOML files excluding node_modules and .git
-          TOML_FILES=$(find . -type f -name "*.toml" \
-            ! -path "*/node_modules/*" \
-            ! -path "*/.git/*" \
-            ! -path "*/venv/*" \
-            ! -path "*/.venv/*" \
-            2>/dev/null || true)
-
-          if [ -z "$TOML_FILES" ]; then
-            MESSAGE="✅ **TOML Files:** No TOML files found to check"
-            STATUS="success"
-          else
-            FILE_COUNT=$(echo "$TOML_FILES" | wc -l)
-            
-            # Run taplo check
-            set +e
-            TAPLO_OUTPUT=$(echo "$TOML_FILES" | xargs taplo check 2>&1)
-            TAPLO_EXIT=$?
-            set -e
-
-            if [ $TAPLO_EXIT -eq 0 ]; then
-              MESSAGE="✅ **TOML Files:** All $FILE_COUNT file(s) are valid"
-              STATUS="success"
-            else
-              # Extract failed files from taplo output
-              FAILED_FILES=$(echo "$TAPLO_OUTPUT" | grep -oP '(?<=")[^"]+\.toml(?=")' | head -n 1 || echo "unknown")
-              FAILED_COUNT=$(echo "$TAPLO_OUTPUT" | grep -c "error" || echo "1")
-              
-              MESSAGE="❌ **TOML Files:** Found syntax errors in TOML files (e.g., \`$FAILED_FILES\`)"
-              STATUS="failure"
-              
-              # Show errors as GitHub annotations
-              # Taplo output is visual, e.g.:
-              #   ┌─ file.toml:1:15
-              echo "$TAPLO_OUTPUT" | while IFS= read -r line; do
-                # Check for location line: ┌─ file:line:col
-                if echo "$line" | grep -q "┌─ "; then
-                   # Extract info using sed
-                   # Remove leading whitespace and ┌─ 
-                   clean_line=$(echo "$line" | sed 's/^[[:space:]]*┌─ //')
-                   file=$(echo "$clean_line" | cut -d':' -f1)
-                   line_num=$(echo "$clean_line" | cut -d':' -f2)
-                   col_num=$(echo "$clean_line" | cut -d':' -f3)
-                   
-                   if [ -n "$file" ] && [ -n "$line_num" ]; then
-                     echo "::error file=${file},line=${line_num},col=${col_num}::TOML syntax error"
-                   fi
-                elif echo "$line" | grep -q "error:"; then
-                   # Fallback for general errors
-                   echo "::error::TOML: ${line}"
-                fi
-              done
-            fi
-          fi
-
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-          } >> "$GITHUB_OUTPUT"
-
+        run: .github/scripts/check-toml-files.sh
