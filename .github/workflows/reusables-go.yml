@@ -127,26 +127,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          TIDY_STATUS="${{ steps.tidy.outcome }}"
-          LINT_STATUS="${{ steps.lint.outcome }}"
-          TEST_STATUS="${{ steps.test.outcome }}"
-          BUILD_STATUS="${{ steps.build.outcome }}"
-
-          ALL_PASSED=true
-          for status in "$TIDY_STATUS" "$LINT_STATUS" \
-            "$TEST_STATUS" "$BUILD_STATUS"; do
-            if [ "$status" != "success" ]; then
-              ALL_PASSED=false
-              break
-            fi
-          done
-
-          if $ALL_PASSED; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=All Go checks passed" >> $GITHUB_OUTPUT
-          else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            MSG="Go checks failed: t=$TIDY_STATUS,l=$LINT_STATUS,"
-            MSG="${MSG}t=$TEST_STATUS,b=$BUILD_STATUS"
-            echo "summary=$MSG" >> $GITHUB_OUTPUT
-          fi
+          .github/scripts/go-check-outcome.sh \
+            "${{ steps.tidy.outcome }}" \
+            "${{ steps.lint.outcome }}" \
+            "${{ steps.test.outcome }}" \
+            "${{ steps.build.outcome }}"
