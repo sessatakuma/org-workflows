@@ -1,27 +1,27 @@
 ---
 name: Reusable Go Checks
 
-on:
+on:  # yamllint disable-line rule:truthy
   workflow_call:
     inputs:
       go-version:
-        description: 'Go version to use'
+        description: "Go version to use"
         type: string
-        default: 'stable'
+        default: "stable"
       working-directory:
-        description: 'Directory where Go code is located'
+        description: "Directory where Go code is located"
         type: string
-        default: '.'
+        default: "."
     secrets:
       CHECKER_TOKEN:
-        description: 'Token for API operations'
+        description: "Token for API operations"
         required: true
     outputs:
       go-summary:
-        description: 'Summary of Go checks'
+        description: "Summary of Go checks"
         value: ${{ jobs.check-go-code.outputs.summary }}
       go-status:
-        description: 'Status of Go checks'
+        description: "Status of Go checks"
         value: ${{ jobs.check-go-code.outputs.status }}
 
 permissions:
@@ -112,8 +112,8 @@ jobs:
         uses: mikepenz/action-junit-report@v4
         if: always()
         with:
-          report_paths: '**/test-results.xml'
-          check_name: 'Go Test Results'
+          report_paths: "**/test-results.xml"
+          check_name: "Go Test Results"
 
       - name: Build Check (Dry Run)
         id: build

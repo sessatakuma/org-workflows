@@ -1,6 +1,7 @@
+---
 name: 'Python Code Quality Checks'
 
-on:
+on:  # yamllint disable-line rule:truthy
   workflow_call:
     inputs:
       python-version:
@@ -56,7 +57,6 @@ env:
     namespace_packages = true
     warn_unused_ignores = false
     ignore_missing_imports = true
-    
 jobs:
   check-python-code:
     name: 'Python Quality Checks'
@@ -68,41 +68,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }} 
+          ref: ${{ github.head_ref }}
 
       - name: Create default pyproject.toml if missing
-        run: |
-          if [ ! -f "pyproject.toml" ]; then
-            echo "Creating default pyproject.toml..."
-            {
-              echo "${{ env.DEFAULT_PROJECT_CONFIG }}"
-              echo ""
-              echo "${{ env.DEFAULT_RUFF_CONFIG }}"
-              echo ""
-              echo "${{ env.DEFAULT_MYPY_CONFIG }}"
-            } > pyproject.toml
-          else
-            # Check and add ruff config if missing
-            if ! grep -q "\[tool.ruff\]" pyproject.toml; then
-              echo "Adding default ruff configuration to pyproject.toml..."
-              echo "" >> pyproject.toml
-              echo "${{ env.DEFAULT_RUFF_CONFIG }}" >> pyproject.toml
-            fi
-            
-            # Check and add mypy config if missing
-            if ! grep -q "\[tool.mypy\]" pyproject.toml; then
-              echo "Adding default mypy configuration to pyproject.toml..."
-              echo "" >> pyproject.toml
-              echo "${{ env.DEFAULT_MYPY_CONFIG }}" >> pyproject.toml
-            fi
-          fi
+        env:
+          DEFAULT_PROJECT_CONFIG: ${{ env.DEFAULT_PROJECT_CONFIG }}
+          DEFAULT_RUFF_CONFIG: ${{ env.DEFAULT_RUFF_CONFIG }}
+          DEFAULT_MYPY_CONFIG: ${{ env.DEFAULT_MYPY_CONFIG }}
+        run: .github/scripts/setup-pyproject.sh
 
       - name: Set up Python
         id: setup_python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-          
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
@@ -112,11 +91,9 @@ jobs:
       - name: Install Dependencies and Linters
         run: |
           uv sync
-
       - name: Ensure Ruff and Mypy are installed
         run: |
           uv pip install ruff mypy
-            
       - name: Check Ruff Formatter
         id: ruff_format
         continue-on-error: true
@@ -141,53 +118,27 @@ jobs:
           MYPY_EXIT_CODE=$?
 
           if [ -f mypy_output.txt ]; then
-            sed -i -E 's/^([^:]+:[0-9]+):[[:space:]]+(error|warning|note):/\1:: \2:/' mypy_output.txt
+            sed -i -E \
+              's/^([^:]+:[0-9]+):[[:space:]]+(error|warning|note):/\1:: \2:/' \
+              mypy_output.txt
           fi
-          
           # Parse mypy output and generate GitHub annotations
-          if [ -f mypy_output.txt ]; then
-            while IFS= read -r line; do
-              # Match pattern: file.py:line:column: error_type: message
-              if echo "$line" | grep -qE '^[^:]+:[0-9]+:[0-9]*:'; then
-                # Extract file, line, column, error type, and message
-                file=$(echo "$line" | cut -d':' -f1)
-                line_num=$(echo "$line" | cut -d':' -f2)
-                col_num=$(echo "$line" | cut -d':' -f3)
-                rest=$(echo "$line" | cut -d':' -f4-)
-                
-                # Extract error type (error, warning, note) and message
-                error_type=$(echo "$rest" | sed -E 's/^[[:space:]]*(error|warning|note):.*/\1/')
-                message=$(echo "$rest" | sed -E 's/^[[:space:]]*(error|warning|note):[[:space:]]*//')
-                
-                # Determine annotation level
-                case "$error_type" in
-                  error) level="error" ;;
-                  warning) level="warning" ;;
-                  note) level="notice" ;;
-                  *) level="error" ;;
-                esac
-                
-                # Generate GitHub annotation
-                if [ -n "$col_num" ] && [ "$col_num" != " " ]; then
-                  echo "::${level} title=Mypy (${error_type}),file=${file},line=${line_num},col=${col_num}::${file}:${line_num}:${col_num}: ${error_type}: ${message}"
-                else
-                  echo "::${level} title=Mypy (${error_type}),file=${file},line=${line_num}::${file}:${line_num}: ${error_type}: ${message}"
-                fi
-              fi
-            done < mypy_output.txt
-          fi
-          
+          .github/scripts/parse-mypy-output.sh
           # Exit with mypy's original exit code
           exit $MYPY_EXIT_CODE
-  
+
       - name: Set Python Checks Outcome
         id: outcome
         if: always()
         run: |
-          if [[ "${{ steps.ruff_format.outcome }}" == "failure" || "${{ steps.ruff_lint.outcome }}" == "failure" || "${{ steps.mypy_check.outcome }}" == "failure" ]]; then
+          if [[ "${{ steps.ruff_format.outcome }}" == "failure" || \
+                "${{ steps.ruff_lint.outcome }}" == "failure" || \
+                "${{ steps.mypy_check.outcome }}" == "failure" ]]; then
             echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **Python Quality:** Checks failed (see annotations for details)." >> $GITHUB_OUTPUT
+            echo "summary=❌ **Python Quality:** Checks failed." \
+              >> $GITHUB_OUTPUT
           else
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Python Quality:** All checks passed." >> $GITHUB_OUTPUT
+            echo "summary=✅ **Python Quality:** All checks passed." \
+              >> $GITHUB_OUTPUT
           fi

@@ -1,6 +1,7 @@
+---
 name: 'Basic Code Quality Checks'
 
-on:
+on:  # yamllint disable-line rule:truthy
   workflow_call:
     secrets:
       CHECKER_TOKEN:
@@ -62,87 +63,11 @@ jobs:
       - name: Check Commit Messages Format
         id: check
         env:
+          TYPES: ${{ env.TYPES }}
+          MAX_LENGTH: ${{ env.MAX_LENGTH }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          REGEX="^(${{ env.TYPES }})(\(.+\))?(!?):\s.+"
-          # Get all commits between the base and head of the PR
-          COMMITS=$(git log --format="%H:::%s" "$BASE_SHA".."$HEAD_SHA")
-
-          FAILED_COMMITS_REPORT=""
-          TOTAL_COMMITS=0
-          FAILED_COUNT=0
-
-          # Use a while loop to read each commit line by line
-          while IFS= read -r line; do
-            # Skip empty lines, which can happen with git log
-            if [ -z "$line" ]; then
-              continue
-            fi
-
-            TOTAL_COMMITS=$((TOTAL_COMMITS + 1))
-            COMMIT_SHA=$(echo "$line" | cut -d':' -f1 | cut -c1-7)
-            # Handle cases where the commit message itself contains colons
-            COMMIT_MSG=$(echo "$line" | cut -d':' -f4-)
-
-            ERRORS=""
-
-            # 1. Length Check
-            if [ "${#COMMIT_MSG}" -gt "${{ env.MAX_LENGTH }}" ]; then
-              ERRORS="${ERRORS}  ↳ Title is too long (is **${#COMMIT_MSG}** chars, max is **${{ env.MAX_LENGTH }}**)\n"
-            fi
-
-            # 2. Format Check (Conventional Commit)
-            if [[ ! "$COMMIT_MSG" =~ $REGEX ]]; then
-              if [[ ! "$COMMIT_MSG" =~ : ]]; then
-                ERRORS="${ERRORS}  ↳ Missing ':' separator\n"
-              elif [[ ! "$COMMIT_MSG" =~ ^(${{ env.TYPES }}) ]]; then
-                ERRORS="${ERRORS}  ↳ Invalid type prefix\n"
-              elif [[ "$COMMIT_MSG" =~ ^(${{ env.TYPES }})(\(.+\))?:[[:space:]]*$ ]]; then
-                ERRORS="${ERRORS}  ↳ Missing description after ':'\n"
-              else
-                ERRORS="${ERRORS}  ↳ Invalid format\n"
-              fi
-            fi
-
-            # 3. Lowercase Description Check
-            DESC=$(echo "$COMMIT_MSG" | sed -E "s/^(${{ env.TYPES }})(\(.+\))?:\s+//")
-            if [[ ! "$DESC" =~ ^[a-z] ]]; then
-              ERRORS="${ERRORS}  ↳ Description must start with a lowercase letter\n"
-            fi
-
-            # If any errors were found, add them to the report
-            if [ -n "$ERRORS" ]; then
-              FAILED_COUNT=$((FAILED_COUNT + 1))
-              # Append the formatted error message for this commit
-              FAILED_COMMITS_REPORT="${FAILED_COMMITS_REPORT}- [\`${COMMIT_SHA}\`] \`${COMMIT_MSG}\`\n${ERRORS}"
-            fi
-          done <<< "$COMMITS"
-
-          # Determine the final status and construct the output summary
-          if [ "$FAILED_COUNT" -eq 0 ]; then
-            MESSAGE="✅ **Commit Messages:** All $TOTAL_COMMITS commit(s) passed (Length, Format, Case)"
-            STATUS="success"
-            REPORT=""
-          else
-            MESSAGE="❌ **Commit Messages:** $FAILED_COUNT of $TOTAL_COMMITS commit(s) failed validation"
-            STATUS="failure"
-            # Construct a detailed report for failed commits
-            REPORT="Expected format: \`type(scope): description\` (max ${{ env.MAX_LENGTH }} chars)\n"
-            REPORT+="Valid types: ${{ env.TYPES }}\n\n"
-            REPORT+="Failed commits:\n"
-            REPORT+="$FAILED_COMMITS_REPORT"
-          fi
-
-          # Write the outputs to the GITHUB_OUTPUT file for the workflow to use
-          # The '<<EOF' syntax handles multi-line strings correctly
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-            echo "report<<EOF"
-            echo -e "$REPORT"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+        run: .github/scripts/check-commit-messages.sh
 
   check-conflicts:
     name: 'Check Merge Conflicts'
@@ -158,43 +83,7 @@ jobs:
 
       - name: Check for conflict markers
         id: check
-        run: |
-          # Search for conflict markers recursively in the current directory.
-          # Exclude common directories like .git and node_modules.
-          # The '|| true' prevents the script from exiting if grep finds no matches.
-          CONFLICT_FILES=$(grep -r -n -E '^(<<<<<<<|=======|>>>>>>>)' \
-            --exclude-dir=.git \
-            --exclude-dir=node_modules \
-            --exclude-dir=dist \
-            --exclude-dir=build \
-            --exclude=reusables-basic.yml \
-            . 2>/dev/null || true)
-
-          # If conflict markers were found...
-          if [ -n "$CONFLICT_FILES" ]; then
-            # Get the name of the first file containing conflicts for the summary message.
-            FIRST_FILE=$(echo "$CONFLICT_FILES" | head -n 1 | cut -d: -f1)
-            # Count the total number of unique files with conflicts.
-            FILE_COUNT=$(echo "$CONFLICT_FILES" | cut -d: -f1 | sort -u | wc -l)
-            
-            MESSAGE="❌ **Conflicts:** Found unresolved merge markers in $FILE_COUNT file(s) (e.g., \`$FIRST_FILE\`)"
-            STATUS="failure"
-          # If no conflicts were found...
-          else
-            MESSAGE="✅ **Conflicts:** No merge conflict markers found"
-            STATUS="success"
-          fi
-
-          # Write the outputs for the workflow.
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-          } >> "$GITHUB_OUTPUT"
-
-          # If the check failed, exit with 0. The orchestrator will handle the failure.
-          if [ "$STATUS" == "failure" ]; then
-            exit 0
-          fi
+        run: .github/scripts/check-conflicts.sh
 
   check-pr-title:
     name: 'Check PR Title'
@@ -206,60 +95,10 @@ jobs:
       - name: Check PR Title Format
         id: check
         env:
+          TYPES: ${{ env.TYPES }}
+          MAX_LENGTH: ${{ env.MAX_LENGTH }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          TITLE_LENGTH=${#PR_TITLE}
-          STATUS="success" # Default to success
-
-          # 1. Length Check
-          if [ "$TITLE_LENGTH" -gt "${{ env.MAX_LENGTH }}" ]; then
-            MESSAGE="❌ **PR Title:** Title is too long (is **$TITLE_LENGTH** chars, max is **${{ env.MAX_LENGTH }}**). Current: \`$PR_TITLE\`"
-            STATUS="failure"
-          fi
-
-          # 2. Format Check (only if length check passed)
-          if [ "$STATUS" == "success" ]; then
-            REGEX="^(${{ env.TYPES }})(\(.+\))?:\s.+"
-            if [[ ! "$PR_TITLE" =~ $REGEX ]]; then
-              STATUS="failure"
-              if [[ ! "$PR_TITLE" =~ : ]]; then
-                ERROR_DETAIL="Missing ':' separator"
-              elif [[ ! "$PR_TITLE" =~ ^(${{ env.TYPES }}) ]]; then
-                ERROR_DETAIL="Invalid or missing type prefix (must be one of: ${{ env.TYPES }})"
-              elif [[ "$PR_TITLE" =~ ^(${{ env.TYPES }})(\(.+\))?:[[:space:]]*$ ]]; then
-                ERROR_DETAIL="Missing description after ':'"
-              else
-                ERROR_DETAIL="Invalid format"
-              fi
-              MESSAGE="❌ **PR Title:** $ERROR_DETAIL. Current: \`$PR_TITLE\`. Expected: \`type: description\` (e.g., \`feat: add new feature\`)"
-            fi
-          fi
-
-          # 3. Lowercase Description Check (only if previous checks passed)
-          if [ "$STATUS" == "success" ]; then
-            DESC=$(echo "$PR_TITLE" | sed -E "s/^(${{ env.TYPES }})(\(.+\))?:\s+//")
-            if [[ ! "$DESC" =~ ^[a-z] ]]; then
-              STATUS="failure"
-              MESSAGE="❌ **PR Title:** Description must start with a lowercase letter. Current: \`$PR_TITLE\`"
-            fi
-          fi
-
-          # Set final success message if no failure occurred
-          if [ "$STATUS" == "success" ]; then
-            MESSAGE="✅ **PR Title:** Passed (Length: $TITLE_LENGTH/${{ env.MAX_LENGTH }}, Format: OK). \`$PR_TITLE\`"
-          fi
-
-          # Write outputs for the workflow
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-          } >> "$GITHUB_OUTPUT"
-
-          # If the check failed, exit with 0 to prevent the script from stopping the workflow.
-          # The orchestrator will handle the overall failure.
-          if [ "$STATUS" == "failure" ]; then
-            exit 0
-          fi
+        run: .github/scripts/check-pr-title.sh
 
   check-branch-name:
     name: 'Check Branch Name'
@@ -271,43 +110,6 @@ jobs:
       - name: Check Branch Name Format
         id: check
         env:
+          TYPES: ${{ env.TYPES }}
           BRANCH_NAME: ${{ github.head_ref }}
-        run: |
-          STATUS="success" # Default to success
-
-          # Allow 'dev' as a special case; it's always valid
-          if [[ "$BRANCH_NAME" = "dev" ]]; then
-            MESSAGE="✅ **Branch Name:** Valid special branch (\`$BRANCH_NAME\`)"
-            STATUS="success"
-          # Otherwise, validate against the standard format
-          else
-            FULL_REGEX="^(${{ env.TYPES }})\/([a-z0-9][a-z0-9-]*)$"
-
-            if [[ ! "$BRANCH_NAME" =~ / ]]; then
-              MESSAGE="❌ **Branch Name:** Missing '/' separator. Current: \`$BRANCH_NAME\`. Expected: \`type/description\`"
-              STATUS="failure"
-            elif [[ ! "$BRANCH_NAME" =~ ^(${{ env.TYPES }})\/ ]]; then
-              MESSAGE="❌ **Branch Name:** Invalid type prefix. Current: \`$BRANCH_NAME\`. Must start with one of: ${{ env.TYPES }}\`"
-              STATUS="failure"
-            elif [[ ! "$BRANCH_NAME" =~ $FULL_REGEX ]]; then
-              MESSAGE="❌ **Branch Name:** Invalid format after '/'. Must be lowercase alphanumeric and hyphens. Current: \`$BRANCH_NAME\`"
-              STATUS="failure"
-            fi
-          fi
-
-          # Set final success message if no failure occurred
-          if [ "$STATUS" == "success" ] && [[ "$BRANCH_NAME" != "dev" ]]; then
-            MESSAGE="✅ **Branch Name:** Follows naming convention (\`$BRANCH_NAME\`)"
-          fi
-
-          # Write outputs for the workflow
-          {
-            echo "status=$STATUS"
-            echo "summary=$MESSAGE"
-          } >> "$GITHUB_OUTPUT"
-
-          # If the check failed, exit with 0 to prevent the script from stopping the workflow.
-          # The orchestrator job will handle the overall failure.
-          if [ "$STATUS" == "failure" ]; then
-            exit 0
-          fi
+        run: .github/scripts/check-branch-name.sh
