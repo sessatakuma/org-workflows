@@ -19,7 +19,7 @@ permissions:
 jobs:
   quality-checks:
     name: Run Organization Quality Checks
-    uses: sessatakuma/org-workflows/.github/workflows/entrypoint.yml@main
+    uses: ./.github/workflows/entrypoint.yml
     secrets:
       CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
