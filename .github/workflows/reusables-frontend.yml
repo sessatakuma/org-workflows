@@ -16,16 +16,16 @@ on:  # yamllint disable-line rule:truthy
     outputs:
       prettier-status:
         description: "The status of the Prettier formatting check."
-        value: ${{ jobs.check-prettier.outputs.status }}
+        value: ${{ jobs.frontend-checks.outputs.prettier-status }}
       prettier-summary:
         description: "A summary of the Prettier formatting check."
-        value: ${{ jobs.check-prettier.outputs.summary }}
+        value: ${{ jobs.frontend-checks.outputs.prettier-summary }}
       eslint-status:
         description: "The status of the ESLint check."
-        value: ${{ jobs.check-eslint.outputs.status }}
+        value: ${{ jobs.frontend-checks.outputs.eslint-status }}
       eslint-summary:
         description: "A summary of the ESLint check."
-        value: ${{ jobs.check-eslint.outputs.summary }}
+        value: ${{ jobs.frontend-checks.outputs.eslint-summary }}
 
 permissions:
   contents: read
@@ -83,72 +83,19 @@ env:
 
 
 jobs:
-  check-prettier:
-    name: 'Check Prettier Formatting'
+  frontend-checks:
+    name: 'Frontend Code Quality Checks'
     runs-on: ubuntu-latest
+    # yamllint disable rule:line-length
     outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
+      prettier-status: ${{ steps.frontend-checks.outputs.prettier-status }}
+      prettier-summary: ${{ steps.frontend-checks.outputs.prettier-summary }}
+      eslint-status: ${{ steps.frontend-checks.outputs.eslint-status }}
+      eslint-summary: ${{ steps.frontend-checks.outputs.eslint-summary }}
+    # yamllint enable
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up default Prettier config
-        run: |
-          if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && \
-             [ ! -f "prettier.config.js" ]; then
-            echo '${{ env.DEFAULT_PRETTIER_CONFIG }}' > .prettierrc.json
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Run Frontend Checks
+        id: frontend-checks
+        uses: ./.github/actions/frontend-checks
         with:
           node-version: ${{ inputs.node-version }}
-
-      - name: Install Dev Dependencies
-        run: |
-          npm install --only=dev
-
-      - name: Ensure Prettier is installed
-        run: |
-          npm list prettier > /dev/null 2>&1 || npm install --save-dev prettier
-
-      - name: Check Prettier Formatter
-        id: check
-        run: .github/scripts/check-prettier.sh
-
-  check-eslint:
-    name: 'Check ESLint'
-    runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up default ESLint config
-        run: |
-          if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && \
-             [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && \
-             [ ! -f "eslint.config.mjs" ]; then
-            echo '${{ env.DEFAULT_ESLINT_CONFIG }}' > eslint.config.mjs
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ inputs.node-version }}
-
-      - name: Install Dev Dependencies
-        run: |
-          npm install --only=dev
-
-      - name: Ensure ESLint is installed
-        run: |
-          npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
-          npm list globals > /dev/null 2>&1 || npm install --save-dev globals
-
-      - name: Check ESLint
-        id: check
-        run: .github/scripts/parse-eslint-json.sh

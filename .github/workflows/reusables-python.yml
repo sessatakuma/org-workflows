@@ -16,127 +16,19 @@ on:  # yamllint disable-line rule:truthy
     outputs:
       python-summary:
         description: "A summary of the Python code quality checks."
-        value: ${{ jobs.check-python-code.outputs.summary }}
+        value: ${{ jobs.python-checks.outputs.python-summary }}
       python-status:
         description: "The overall status of the Python checks."
-        value: ${{ jobs.check-python-code.outputs.status }}
+        value: ${{ jobs.python-checks.outputs.python-status }}
 
 permissions:
   contents: read
   pull-requests: write
   checks: write
 
-env:
-  DEFAULT_PROJECT_CONFIG: |
-    [build-system]
-    requires = ["setuptools>=61.0", "wheel"]
-    build-backend = "setuptools.build_meta"
-
-    [project]
-    name = "project"
-    version = "0.1.0"
-    description = "Project"
-    requires-python = ">=3.11"
-    dependencies = []
-
-  DEFAULT_RUFF_CONFIG: |
-    [tool.ruff.format]
-    quote-style = "double"
-    indent-style = "space"
-
-    [tool.ruff]
-    line-length = 88
-
-    [tool.ruff.lint]
-    select = ["E", "F", "N", "I"]
-
-
-  DEFAULT_MYPY_CONFIG: |
-    [tool.mypy]
-    strict = true
-    namespace_packages = true
-    warn_unused_ignores = false
-    ignore_missing_imports = true
 jobs:
-  check-python-code:
+  python-checks:
     name: 'Python Quality Checks'
-    runs-on: ubuntu-latest
-    outputs:
-      summary: ${{ steps.outcome.outputs.summary }}
-      status: ${{ steps.outcome.outputs.status }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Create default pyproject.toml if missing
-        env:
-          DEFAULT_PROJECT_CONFIG: ${{ env.DEFAULT_PROJECT_CONFIG }}
-          DEFAULT_RUFF_CONFIG: ${{ env.DEFAULT_RUFF_CONFIG }}
-          DEFAULT_MYPY_CONFIG: ${{ env.DEFAULT_MYPY_CONFIG }}
-        run: .github/scripts/setup-pyproject.sh
-
-      - name: Set up Python
-        id: setup_python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python-version }}
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
-      # - name: Add uv to PATH
-      #  run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install Dependencies and Linters
-        run: |
-          uv sync
-      - name: Ensure Ruff and Mypy are installed
-        run: |
-          uv pip install ruff mypy
-      - name: Check Ruff Formatter
-        id: ruff_format
-        continue-on-error: true
-        run: |
-          echo "Running ruff format check..."
-          uv run ruff format . --check --output-format=github
-
-      - name: Check Ruff Linter (with Annotations)
-        id: ruff_lint
-        continue-on-error: true
-        run: |
-          echo "Running ruff check with GitHub annotations..."
-          uv run ruff check . --output-format=github
-
-      - name: Check Mypy (with Annotations)
-        id: mypy_check
-        continue-on-error: true
-        run: |
-          echo "Running mypy with GitHub annotations..."
-          set +e  # Don't exit on mypy failure
-          uv run mypy . > mypy_output.txt 2>&1
-          MYPY_EXIT_CODE=$?
-
-          if [ -f mypy_output.txt ]; then
-            sed -i -E \
-              's/^([^:]+:[0-9]+):[[:space:]]+(error|warning|note):/\1:: \2:/' \
-              mypy_output.txt
-          fi
-          # Parse mypy output and generate GitHub annotations
-          .github/scripts/parse-mypy-output.sh
-          # Exit with mypy's original exit code
-          exit $MYPY_EXIT_CODE
-
-      - name: Set Python Checks Outcome
-        id: outcome
-        if: always()
-        run: |
-          if [[ "${{ steps.ruff_format.outcome }}" == "failure" || \
-                "${{ steps.ruff_lint.outcome }}" == "failure" || \
-                "${{ steps.mypy_check.outcome }}" == "failure" ]]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=❌ **Python Quality:** Checks failed." \
-              >> $GITHUB_OUTPUT
-          else
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=✅ **Python Quality:** All checks passed." \
-              >> $GITHUB_OUTPUT
-          fi
+    uses: ./.github/actions/python-checks
+    with:
+      python-version: ${{ inputs.python-version }}
