@@ -1,7 +1,6 @@
----
 name: Reusable Go Checks
 
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   workflow_call:
     inputs:
       go-version:
@@ -82,7 +81,7 @@ jobs:
         run: |
           go mod tidy
           if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::go.mod/go.sum are dirty, please run 'go mod tidy'"
+            echo "::error::go.mod/sum dirty, run 'go mod tidy'"
             exit 1
           fi
 
@@ -126,9 +125,27 @@ jobs:
         id: outcome
         if: always()
         shell: bash
+        env:
+          TIDY: ${{ steps.tidy.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          BUILD: ${{ steps.build.outcome }}
         run: |
-          .github/scripts/go-check-outcome.sh \
-            "${{ steps.tidy.outcome }}" \
-            "${{ steps.lint.outcome }}" \
-            "${{ steps.test.outcome }}" \
-            "${{ steps.build.outcome }}"
+          ALL_PASSED=true
+          if [[ "$TIDY" != "success" || \
+                "$LINT" != "success" || \
+                "$TEST" != "success" || \
+                "$BUILD" != "success" ]]; then
+            ALL_PASSED=false
+          fi
+
+          if $ALL_PASSED; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "summary=✅ **Go Quality:** All checks passed." \
+              >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+            DETAILS="tidy=$TIDY, lint=$LINT, test=$TEST, build=$BUILD"
+            echo "summary=❌ **Go Quality:** Failed ($DETAILS)." \
+              >> "$GITHUB_OUTPUT"
+          fi
