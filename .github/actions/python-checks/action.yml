@@ -1,0 +1,127 @@
+---
+name: "Python Code Quality Checks"
+description: "Run Python code quality checks (ruff format, ruff lint, mypy)"
+
+inputs:
+  python-version:
+    description: "The Python version to use"
+    required: false
+    default: "3.11"
+
+outputs:
+  python-status:
+    description: "The overall status of the Python checks (success or failure)"
+    value: ${{ steps.outcome.outputs.status }}
+  python-summary:
+    description: "A summary of the Python code quality checks"
+    value: ${{ steps.outcome.outputs.summary }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create default pyproject.toml if missing
+      shell: bash
+      env:
+        DEFAULT_PROJECT_CONFIG: |
+          [build-system]
+          requires = ["setuptools>=61.0", "wheel"]
+          build-backend = "setuptools.build_meta"
+
+          [project]
+          name = "project"
+          version = "0.1.0"
+          description = "Project"
+          requires-python = ">=3.11"
+          dependencies = []
+
+        DEFAULT_RUFF_CONFIG: |
+          [tool.ruff.format]
+          quote-style = "double"
+          indent-style = "space"
+
+          [tool.ruff]
+          line-length = 88
+
+          [tool.ruff.lint]
+          select = ["E", "F", "N", "I"]
+
+        DEFAULT_MYPY_CONFIG: |
+          [tool.mypy]
+          strict = true
+          namespace_packages = true
+          warn_unused_ignores = false
+          ignore_missing_imports = true
+
+      run: ${{ github.action_path }}/scripts/setup-pyproject.sh
+
+    - name: Set up Python
+      id: setup_python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Install Dependencies and Linters
+      shell: bash
+      run: |
+        uv sync
+
+    - name: Ensure Ruff and Mypy are installed
+      shell: bash
+      run: |
+        uv pip install ruff mypy
+
+    - name: Check Ruff Formatter
+      id: ruff_format
+      continue-on-error: true
+      shell: bash
+      run: |
+        echo "Running ruff format check..."
+        uv run ruff format . --check --output-format=github
+
+    - name: Check Ruff Linter (with Annotations)
+      id: ruff_lint
+      continue-on-error: true
+      shell: bash
+      run: |
+        echo "Running ruff check with GitHub annotations..."
+        uv run ruff check . --output-format=github
+
+    - name: Check Mypy (with Annotations)
+      id: mypy_check
+      continue-on-error: true
+      shell: bash
+      run: |
+        echo "Running mypy with GitHub annotations..."
+        set +e  # Don't exit on mypy failure
+        uv run mypy . > mypy_output.txt 2>&1
+        MYPY_EXIT_CODE=$?
+
+        if [ -f mypy_output.txt ]; then
+          sed -i -E \
+            's/^([^:]+:[0-9]+):[[:space:]]+(error|warning|note):/\1:: \2:/' \
+            mypy_output.txt
+        fi
+        # Parse mypy output and generate GitHub annotations
+        ${{ github.action_path }}/scripts/parse-mypy-output.sh
+        # Exit with mypy's original exit code
+        exit $MYPY_EXIT_CODE
+
+    - name: Set Python Checks Outcome
+      id: outcome
+      if: always()
+      shell: bash
+      run: |
+        if [[ "${{ steps.ruff_format.outcome }}" == "failure" || \
+              "${{ steps.ruff_lint.outcome }}" == "failure" || \
+              "${{ steps.mypy_check.outcome }}" == "failure" ]]; then
+          echo "status=failure" >> $GITHUB_OUTPUT
+          echo "summary=❌ **Python Quality:** Checks failed." \
+            >> $GITHUB_OUTPUT
+        else
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "summary=✅ **Python Quality:** All checks passed." \
+            >> $GITHUB_OUTPUT
+        fi

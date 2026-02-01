@@ -1,0 +1,137 @@
+---
+name: 'Go Code Quality Checks'
+description: 'Runs Go code quality checks (formatting, linting, testing).'
+inputs:
+  go-version:
+    description: 'The Go version to use.'
+    required: false
+    default: 'stable'
+  working-directory:
+    description: 'Directory where Go code is located.'
+    required: false
+    default: '.'
+  token:
+    description: 'GITHUB_TOKEN for API operations (reporting).'
+    required: true
+outputs:
+  go-status:
+    description: "The status of the Go checks."
+    value: ${{ steps.outcome.outputs.status }}
+  go-summary:
+    description: "The summary of the Go checks."
+    value: ${{ steps.outcome.outputs.summary }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+
+    - name: Set up default golangci-lint config
+      shell: bash
+      env:
+        DEFAULT_GOLANGCI_CONFIG: |
+          linters:
+            enable:
+              - errcheck
+              - gosimple
+              - govet
+              - ineffassign
+              - staticcheck
+              - unused
+          run:
+            timeout: 5m
+      run: |
+        WORKDIR="${{ inputs.working-directory }}"
+        CONFIG_FILES="golangci.yml golangci.yaml golangci.toml"
+        NO_CONFIG=true
+        for f in $CONFIG_FILES; do
+          if [ -f "$WORKDIR/.$f" ]; then
+            NO_CONFIG=false
+            break
+          fi
+        done
+        if $NO_CONFIG; then
+          echo "$DEFAULT_GOLANGCI_CONFIG" > "$WORKDIR/.golangci.yml"
+        fi
+
+    - name: Check go mod tidy
+      id: tidy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: true
+      run: |
+        go mod tidy
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "::error::go.mod/sum dirty, run 'go mod tidy'"
+          exit 1
+        fi
+
+    - name: Install gotestsum
+      shell: bash
+      run: go install gotest.tools/gotestsum@latest
+
+    - name: Run golangci-lint
+      id: lint
+      uses: golangci/golangci-lint-action@v6
+      continue-on-error: true
+      with:
+        version: latest
+        working-directory: ${{ inputs.working-directory }}
+        args: --timeout=5m
+
+    - name: Run Tests (Race Detector)
+      id: test
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: true
+      run: |
+        GOTESTSUM_BIN="$(go env GOPATH)/bin/gotestsum"
+        $GOTESTSUM_BIN --junitfile test-results.xml -- -race ./...
+
+    - name: Publish Test Results
+      uses: mikepenz/action-junit-report@v4
+      if: always()
+      with:
+        report_paths: "**/test-results.xml"
+        check_name: "Go Test Results"
+        token: ${{ inputs.token }}
+
+    - name: Build Check (Dry Run)
+      id: build
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: true
+      run: go build -v ./...
+
+    - name: Set Go Checks Outcome
+      id: outcome
+      if: always()
+      shell: bash
+      env:
+        TIDY: ${{ steps.tidy.outcome }}
+        LINT: ${{ steps.lint.outcome }}
+        TEST: ${{ steps.test.outcome }}
+        BUILD: ${{ steps.build.outcome }}
+      run: |
+        ALL_PASSED=true
+        if [[ "$TIDY" != "success" || \
+              "$LINT" != "success" || \
+              "$TEST" != "success" || \
+              "$BUILD" != "success" ]]; then
+          ALL_PASSED=false
+        fi
+
+        if $ALL_PASSED; then
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "summary=✅ **Go Quality:** All checks passed." \
+            >> "$GITHUB_OUTPUT"
+        else
+          echo "status=failure" >> "$GITHUB_OUTPUT"
+          DETAILS="tidy=$TIDY, lint=$LINT, test=$TEST, build=$BUILD"
+          echo "summary=❌ **Go Quality:** Failed ($DETAILS)." \
+            >> "$GITHUB_OUTPUT"
+        fi
