@@ -1,225 +1,203 @@
-## 📄 如何新增一個全新的檢查類別
+# 🛠️ 如何新增工作流程 (How to Add Workflows)
 
-> [!WARNING]
-> Half written by claude-opus-4-5-thinking.
+本專案採用 **Caller (呼叫者) → Orchestrator (協調者) → Reusable Workflow (可重複使用工作流程) → Composite Action (複合動作)** 的分層架構。新增檢查機制時，請依循此模式以保持架構整潔與一致性。
 
-假設您想新增一個「文件拼寫檢查」（Doc Linting）類別，並希望它像 `run-python-checks` 一樣可以被開啟或關閉。
+## 架構概觀
 
-這需要三個部分的修改：
+1.  **Entrypoint (`entrypoint.yml`)**: 協調者。定義所有可用的檢查開關，並彙整最終報告。
+2.  **Reusable Workflow (`reusables-*.yml`)**: 中介層。負責呼叫具體的 Action，處理權限與 Secrets。
+3.  **Composite Action (`actions/*/action.yml`)**: 實作層。包含實際的檢查邏輯、工具安裝與腳本執行。
 
-1.  **建立**新的可重用工作流程（`.github/workflows/reusables-docs.yml`）並設定其輸出。
-2.  **修改**這個協同調度器檔案（`.github/workflows/entrypoint.yml`）來呼叫它並讀取其結果。
-3. **更新**說明文件 `README.md` 讓其它人可以知道如何使用。
+---
 
-### 第 1 步：建立可重用的工作流程
+## 步驟 1：建立 Composite Action
 
-這就是您「如何設定輸出」問題的答案。輸出是子工作流程回報給此協同調度器的方式。
+這是實際執行檢查的地方。
 
-您必須遵循 `report-summary` 腳本中設定的**命名慣例**：
+1.  在 `.github/actions/` 下建立新的目錄，例如 `my-new-checks`。
+2.  建立 `action.yml` 和 `scripts/` 目錄。
 
-  * `[check-name]-summary`: (必要) 一段人類可讀的摘要字串，將會被貼到 PR 留言中。
-  * `[check-name]-status`: (必要) 一個狀態字串，通常是 `success` 或 `failure`。
-
-**範例： `.github/workflows/reusables-docs.yml`**
+**`.github/actions/my-new-checks/action.yml` 範例：**
 
 ```yaml
-name: 'Reusable Docs Linting'
+name: "My New Checks"
+description: "Run my new custom checks"
 
-on:
+inputs:
+  my-option:
+    description: "An option for the check"
+    required: false
+    default: "default-value"
+
+outputs:
+  # 統一輸出命名格式：<category>-status 和 <category>-summary
+  new-check-status:
+    description: "Status of the checks (success or failure)"
+    value: ${{ steps.outcome.outputs.status }}
+  new-check-summary:
+    description: "Summary for the PR comment"
+    value: ${{ steps.outcome.outputs.summary }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Check
+      id: check_step
+      shell: bash
+      # 重要：使用 continue-on-error 避免單一檢查失敗導致整個 Job 中斷
+      continue-on-error: true
+      run: |
+        # 執行您的檢查腳本
+        ${{ github.action_path }}/scripts/run-check.sh
+
+    - name: Set Outcome
+      id: outcome
+      if: always() # 確保即使檢查失敗也會執行此步驟
+      shell: bash
+      run: |
+        if [[ "${{ steps.check_step.outcome }}" == "failure" ]]; then
+          echo "status=failure" >> "$GITHUB_OUTPUT"
+          echo "summary=❌ **My Check:** Failed." >> "$GITHUB_OUTPUT"
+        else
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "summary=✅ **My Check:** Passed." >> "$GITHUB_OUTPUT"
+        fi
+```
+
+### 腳本規範 (`scripts/*.sh`)
+
+-   使用 `#!/usr/bin/env bash`
+-   設定 `export LC_ALL=C`
+-   腳本失敗時不要直接 `exit 1`（除非是致命錯誤），應輸出錯誤並由 `action.yml` 判斷 `outcome`。
+
+---
+
+## 步驟 2：建立 Reusable Workflow
+
+這個 Workflow 負責包裝 Composite Action，讓 `entrypoint.yml` 可以呼叫。
+
+**`.github/workflows/reusables-new-check.yml` 範例：**
+
+```yaml
+name: "My New Quality Checks"
+
+on:  # yamllint disable-line rule:truthy
   workflow_call:
-    # 1. 在這裡定義工作流程的「輸出」，
-    # 這樣協同調度器才能接收它們。
-    outputs:
-      docs-lint-summary:
-        description: 'Summary of the docs linting check.'
-        value: ${{ jobs.lint-docs.outputs.summary }}
-      docs-lint-status:
-        description: 'Status (success/failure) of the docs linting check.'
-        value: ${{ jobs.lint-docs.outputs.status }}
+    inputs:
+      my-option:
+        description: "Option passed from entrypoint"
+        required: false
+        type: string
+        default: "default"
     secrets:
       CHECKER_TOKEN:
         required: true
+    outputs:
+      # 對應 Composite Action 的輸出
+      new-check-status:
+        value: ${{ jobs.new-check-job.outputs.new-check-status }}
+      new-check-summary:
+        value: ${{ jobs.new-check-job.outputs.new-check-summary }}
 
 jobs:
-  lint-docs:
-    name: Run Docs Linter
+  new-check-job:
+    name: "Run New Checks"
     runs-on: ubuntu-latest
-    
-    # 2. 讓任務（Job）也定義「輸出」
     outputs:
-      summary: ${{ steps.run-linter.outputs.summary }}
-      status: ${{ steps.run-linter.outcome }} # 'outcome' 會是 'success' 或 'failure'
-
+      new-check-status: ${{ steps.run.outputs.new-check-status }}
+      new-check-summary: ${{ steps.run.outputs.new-check-summary }}
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- 這是您實際的檢查邏輯 ---
-      - name: Run Spell Check
-        id: run-linter # 3. 給這個步驟一個 ID
-        # 假設 linter 成功時退出 0，失敗時退出 1
-        # 'continue-on-error: true' 很重要，這樣才能繼續執行並報告失敗
-        continue-on-error: true
-        run: |
-          echo "Running spell check..."
-          # 這裡放您的實際 linter 指令
-          # spell-check-command --report-file spell-report.txt
-          
-          # 假設檢查失敗
-          echo "Spell check failed"
-          exit 1 
+      - name: Run Composite Action
+        id: run
+        uses: ./.github/actions/my-new-checks
+        with:
+          my-option: ${{ inputs.my-option }}
 
-      # --- 這是設定輸出的關鍵步驟 ---
-      - name: Set Linter Output
-        # 4. 根據 'run-linter' 步驟的結果來設定「步驟輸出」
-        id: set-output
-        if: always()
-        run: |
-          if: ${{ steps.run-linter.outcome == 'success' }}
-          then
-            echo "summary=✅ **Docs Linting:** All files look good!" >> $GITHUB_OUTPUT
-          else
-            echo "summary=❌ **Docs Linting:** Found spelling errors." >> $GITHUB_OUTPUT
-          fi
-```
+---
 
-#### 開發規範
+## 步驟 3：更新 Entrypoint (`entrypoint.yml`)
 
-##### yamllint 合規
-所有 workflow 檔案必須通過 `yamllint` 檢查。常見注意事項：
-- 檔案開頭加 `---`
-- 避免行尾空白
-- 確保檔案結尾有換行符
+這是最關鍵的一步，將新的 Workflow 整合到主流程中。
 
-> [!TIP]
-> `on:` 關鍵字會觸發 yamllint 的 truthy 警告，建議使用：
-> ```yaml
-> on:  # yamllint disable-line rule:truthy
-> ```
-
-##### 外部腳本
-當 shell 指令較為複雜（例如包含迴圈、條件判斷、多行邏輯）時，應提取至 `.github/scripts/` 目錄：
-- 腳本需為可執行檔（`chmod +x`）
-- 透過 `env:` 區塊傳遞 workflow expressions 給腳本
-- 輸出寫入 `$GITHUB_OUTPUT`
+### 1. 新增 Input
+在 `on: workflow_call: inputs:` 區段新增開關：
 
 ```yaml
-- name: Check Something
-  env:
-    MY_VAR: ${{ github.event.pull_request.title }}
-  run: .github/scripts/check-something.sh
-```
-
------
-
-### 第 2 步：修改協同調度器
-
-現在您有了一個 `.github/workflows/reusables-docs.yml`，您需要讓這個協同調度器檔案去呼叫它。
-
-**1. 新增一個 `input` 來控制它：**
-
-在 `on.workflow_call.inputs` 區塊，新增：
-
-```yaml
-      run-docs-checks:
-        description: 'Whether to run the documentation quality checks.'
+      run-new-checks:
+        description: 'Whether to run the new checks.'
         required: false
         type: boolean
         default: false
 ```
 
-**2. 新增一個 `job` 來呼叫它：**
-
-在 `jobs` 區塊，新增一個 `call-docs-checks` 任務：
+### 2. 新增 Job
+呼叫您在步驟 2 建立的 Workflow：
 
 ```yaml
-  call-docs-checks:
-    name: Run Documentation Quality Checks
-    if: inputs.run-docs-checks # 使用您剛才新增的 input
-    uses: ./.github/workflows/reusables-docs.yml
+  call-new-checks:
+    name: Run New Quality Checks
+    if: inputs.run-new-checks
+    uses: ./.github/workflows/reusables-new-check.yml
+    with:
+      my-option: 'some-value'
     secrets:
       CHECKER_TOKEN: ${{ secrets.CHECKER_TOKEN }}
 ```
 
-**3. 更新 `report-summary` 任務：**
+### 3. 更新報告 (JavaScript)
+在 `report-summary` Job 中：
+1.  將 `call-new-checks` 加入 `needs` 列表。
+2.  更新 `github-script` 步驟，解析輸出並產生報告。
 
-這是最後且最重要的一步。
-
-  * **A. 新增 `needs` 依賴：**
-    告訴 `report-summary` 任務也要等待 `call-docs-checks` 完成。
-
-    ```yaml
-    report-summary:
-      name: Report Overall Summary
-      runs-on: ubuntu-latest
-      needs:
-        - call-basic-checks
-        - call-python-checks
-        - call-config-checks
-        - call-docs-checks  # <-- 新增這一行
-      if: always()
-      ...
-    ```
-
-  * **B. 更新 `github-script` 腳本：**
-    在腳本中新增一個區塊來讀取 `needs['call-docs-checks']` 的輸出。把它放在 "Config Checks" 區塊後面即可。
-
-    ```javascript
-            // ... (Config Checks 區塊結束) ...
-
-            // --- Docs Checks ---
-            if (wasJobRun(needs['call-docs-checks'])) {
+```javascript
+            // --- New Checks ---
+            if (wasJobRun(needs['call-new-checks'])) {
               anyJobRan = true;
-              const { outputs } = needs['call-docs-checks'];
-              
+              const { outputs } = needs['call-new-checks'];
+
               if (outputs) {
-                // 'docs-lint-summary' 必須符合您在 reusables-docs.yml 中定義的 output 名稱
-                comment_body += getOutput(outputs, 'docs-lint-summary', '⚠️ **Docs Linting:** No output received') + "\n";
+                // 取得 Summary
+                comment_body += getOutput(outputs, 'new-check-summary',
+                  '⚠️ **New Check:** No output received') + "\n";
                 
-                // 'docs-lint-status' 也是
-                if (getOutput(outputs, 'docs-lint-status') === 'failure') {
+                // 判斷狀態
+                if (getOutput(outputs, 'new-check-status') === 'failure') {
                   all_passed = false;
                 }
               } else {
-                comment_body += "⚠️ **Docs Checks:** Completed but no outputs received\n";
+                comment_body += "⚠️ **New Checks:** Completed but no outputs received\n";
               }
             }
-            
-            // --- Detailed Reports ---
-            // ...
+```
+
+---
+
+## 步驟 4：更新文件與測試
+
+1.  **更新 `README.md`**：在 Inputs 列表中加入新的參數說明。
+2.  **本地驗證**：
+    ```bash
+    # 檢查 YAML 語法
+    yamllint .github/
+
+    # 檢查 Shell 腳本
+    shellcheck .github/actions/my-new-checks/scripts/*.sh
+
+    # 使用 act 進行本地模擬測試 (需先安裝 act)
+    # 列出可用工作流程
+    act pull_request --list
+
+    # 進行 dry-run (不實際執行)
+    act pull_request -n
     ```
+3.  **整合測試**：建立一個測試用的 PR，開啟該檢查，確認 Bot 有正確留言回報狀態。
 
-### 第 3 步：更新說明文件
+## 命名慣例
 
-
-在功能開發完成後，最後一步是更新文件，讓組織中的其他成員知道這項新檢查的存在，以及如何在他們的專案中啟用它。
-
-您主要需要更新`README.md`的兩個地方：
-
-1. 新增arguments的說明。
-2. 新增checking details的說明。 
-
-
-在您的 `README.md` 檔案中，找到說明可用 `inputs` 的部分，並新增 `run-docs-checks` 的條目。
-
-| Input | Description | Type | Default |
-| :--- | :--- | :--- | :--- |
-| `run-basic-checks` | Whether to run the basic PR quality checks. | `boolean` | `true` |
-| `run-python-checks` | Whether to run the Python code quality checks. | `boolean` | `false` |
-| `python-version` | The Python version to use for the Python checks. | `string` | `'3.11'` |
-| `run-config-checks` | Whether to run the configuration files quality checks. | `boolean` | `false` |
-| **`run-docs-checks`** | **Whether to run the documentation quality checks.** | **`boolean`** | **`false`** |
-
-此外，記得在 `Checking details` 內簡單說明你的workflows檢查了什麼項目。
-
-
-```
-### Python Code Quality Checks
-This checker will validate:
-1. **Syntax of the markdown file**: ...
-2. ... 
-```
-
------
-
-完成這三步後，您的新檢查類別就完全整合並準備好供組織內的其他專案使用了。
+-   **Workflow 檔案**: `reusables-<category>.yml`
+-   **Action 目錄**: `.github/actions/<category>-checks/`
+-   **Job ID**: `call-<category>-checks`
+-   **Outputs**: `<category>-status`, `<category>-summary`
