@@ -1,0 +1,93 @@
+name: 'Basic PR Quality Checks'
+description: 'Composite action that runs 4 basic PR quality checks: PR title, branch name, commit messages, and merge conflicts'
+
+inputs:
+  types:
+    description: 'Valid commit type prefixes (pipe-separated)'
+    required: false
+    default: 'feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|hotfix'
+  max-length:
+    description: 'Maximum allowed length for PR title and commit messages'
+    required: false
+    default: '75'
+  pr-title:
+    description: 'The PR title to validate'
+    required: true
+  branch-name:
+    description: 'The branch name to validate'
+    required: true
+  base-sha:
+    description: 'Base commit SHA for commit message comparison'
+    required: true
+  head-sha:
+    description: 'Head commit SHA for commit message comparison'
+    required: true
+
+outputs:
+  pr-title-status:
+    description: 'Status of the PR title check (success or failure)'
+    value: ${{ steps.pr-title.outputs.status }}
+  pr-title-summary:
+    description: 'Summary message for the PR title check'
+    value: ${{ steps.pr-title.outputs.summary }}
+  branch-name-status:
+    description: 'Status of the branch name check (success or failure)'
+    value: ${{ steps.branch-name.outputs.status }}
+  branch-name-summary:
+    description: 'Summary message for the branch name check'
+    value: ${{ steps.branch-name.outputs.summary }}
+  commit-messages-status:
+    description: 'Status of the commit messages check (success or failure)'
+    value: ${{ steps.commit-messages.outputs.status }}
+  commit-messages-summary:
+    description: 'Summary message for the commit messages check'
+    value: ${{ steps.commit-messages.outputs.summary }}
+  commit-messages-report:
+    description: 'Detailed report for failed commit messages'
+    value: ${{ steps.commit-messages.outputs.report }}
+  conflicts-status:
+    description: 'Status of the merge conflicts check (success or failure)'
+    value: ${{ steps.conflicts.outputs.status }}
+  conflicts-summary:
+    description: 'Summary message for the merge conflicts check'
+    value: ${{ steps.conflicts.outputs.summary }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check PR Title
+      id: pr-title
+      shell: bash
+      env:
+        TYPES: ${{ inputs.types }}
+        MAX_LENGTH: ${{ inputs.max-length }}
+        PR_TITLE: ${{ inputs.pr-title }}
+      run: ${{ github.action_path }}/scripts/check-pr-title.sh
+
+    - name: Check Branch Name
+      id: branch-name
+      shell: bash
+      env:
+        TYPES: ${{ inputs.types }}
+        BRANCH_NAME: ${{ inputs.branch-name }}
+      run: ${{ github.action_path }}/scripts/check-branch-name.sh
+
+    - name: Check Commit Messages
+      id: commit-messages
+      shell: bash
+      env:
+        TYPES: ${{ inputs.types }}
+        MAX_LENGTH: ${{ inputs.max-length }}
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: ${{ github.action_path }}/scripts/check-commit-messages.sh
+
+    - name: Check Merge Conflicts
+      id: conflicts
+      shell: bash
+      run: ${{ github.action_path }}/scripts/check-conflicts.sh

@@ -1,0 +1,123 @@
+name: Frontend Code Quality Checks
+description: Runs Prettier and ESLint checks for frontend code quality
+
+inputs:
+  node-version:
+    description: Node.js version to use
+    required: false
+    default: '20'
+
+outputs:
+  prettier-status:
+    description: Status of Prettier check (success/failure)
+    value: ${{ steps.prettier.outputs.status }}
+  prettier-summary:
+    description: Summary of Prettier check results
+    value: ${{ steps.prettier.outputs.summary }}
+  eslint-status:
+    description: Status of ESLint check (success/failure)
+    value: ${{ steps.eslint.outputs.status }}
+  eslint-summary:
+    description: Summary of ESLint check results
+    value: ${{ steps.eslint.outputs.summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up default Prettier config
+      shell: bash
+      run: |
+        if [ ! -f ".prettierrc" ] && [ ! -f ".prettierrc.json" ] && \
+           [ ! -f "prettier.config.js" ]; then
+          cat > .prettierrc.json << 'EOF'
+        {
+          "semi": true,
+          "singleQuote": true,
+          "trailingComma": "es5",
+          "tabWidth": 2,
+          "useTabs": false,
+          "arrowParens": "always",
+          "printWidth": 80
+        }
+        EOF
+        fi
+
+    - name: Set up default ESLint config
+      shell: bash
+      run: |
+        if [ ! -f ".eslintrc" ] && [ ! -f ".eslintrc.json" ] && \
+           [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ] && \
+           [ ! -f "eslint.config.mjs" ]; then
+          cat > eslint.config.mjs << 'EOF'
+        import js from "@eslint/js";
+        import globals from "globals";
+
+        export default [
+            js.configs.recommended,
+            {
+                files: ["**/*.{js,mjs,cjs,jsx}"],
+
+                languageOptions: {
+                    ecmaVersion: "latest",
+                    sourceType: "module",
+                    globals: {
+                        ...globals.browser,
+                        ...globals.node,
+                        ...globals.es2021
+                    },
+                    parserOptions: {
+                        ecmaFeatures: {
+                            jsx: true
+                        }
+                    }
+                },
+                rules: {
+                    "no-console": "warn",
+                    "no-unused-vars": "warn",
+                    "no-var": "error"
+                },
+            },
+            {
+                ignores: [
+                    "dist/**",
+                    "node_modules/**",
+                    "build/**"
+                ]
+            }
+        ];
+        EOF
+        fi
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install Dev Dependencies
+      shell: bash
+      run: |
+        npm install --only=dev
+
+    - name: Ensure Prettier is installed
+      shell: bash
+      run: |
+        npm list prettier > /dev/null 2>&1 || npm install --save-dev prettier
+
+    - name: Ensure ESLint is installed
+      shell: bash
+      run: |
+        npm list eslint > /dev/null 2>&1 || npm install --save-dev eslint
+        npm list globals > /dev/null 2>&1 || npm install --save-dev globals
+
+    - name: Check Prettier Formatting
+      id: prettier
+      shell: bash
+      run: ${{ github.action_path }}/scripts/check-prettier.sh
+
+    - name: Check ESLint
+      id: eslint
+      shell: bash
+      run: ${{ github.action_path }}/scripts/parse-eslint-json.sh
