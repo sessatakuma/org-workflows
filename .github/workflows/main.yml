@@ -33,7 +33,7 @@ jobs:
 
       # Configuration Files Quality Checks (optional)
       # Checks YAML, JSON, and TOML files for syntax errors
-      run-config-checks: false
+      run-config-checks: true
 
       # Frontend Code Quality Checks (optional)
       # Requires: Node.js project with Prettier configured
