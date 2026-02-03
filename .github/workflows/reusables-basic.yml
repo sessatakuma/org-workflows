@@ -1,115 +1,70 @@
 ---
-name: 'Basic Code Quality Checks'
+name: "Basic Code Quality Checks"
 
 on:  # yamllint disable-line rule:truthy
   workflow_call:
     secrets:
       CHECKER_TOKEN:
-        description: 'The GITHUB_TOKEN passed from the caller'
+        description: "The GITHUB_TOKEN passed from the caller"
         required: true
     outputs:
       pr-title-status:
         description: "The status of the PR title check."
-        value: ${{ jobs.check-pr-title.outputs.status }}
+        value: ${{ jobs.basic-checks.outputs.pr-title-status }}
       pr-title-summary:
         description: "The summary of the PR title check."
-        value: ${{ jobs.check-pr-title.outputs.summary }}
+        value: ${{ jobs.basic-checks.outputs.pr-title-summary }}
       branch-name-status:
         description: "The status of the branch name check."
-        value: ${{ jobs.check-branch-name.outputs.status }}
+        value: ${{ jobs.basic-checks.outputs.branch-name-status }}
       branch-name-summary:
         description: "The summary of the branch name check."
-        value: ${{ jobs.check-branch-name.outputs.summary }}
+        value: ${{ jobs.basic-checks.outputs.branch-name-summary }}
       commit-messages-status:
         description: "The status of the commit messages check."
-        value: ${{ jobs.check-commits.outputs.status }}
+        value: ${{ jobs.basic-checks.outputs.commit-messages-status }}
       commit-messages-summary:
         description: "The summary of the commit messages check."
-        value: ${{ jobs.check-commits.outputs.summary }}
+        value: ${{ jobs.basic-checks.outputs.commit-messages-summary }}
       commit-messages-report:
         description: "A detailed report for failed commit messages."
-        value: ${{ jobs.check-commits.outputs.report }}
+        value: ${{ jobs.basic-checks.outputs.commit-messages-report }}
       conflicts-status:
         description: "The status of the merge conflicts check."
-        value: ${{ jobs.check-conflicts.outputs.status }}
+        value: ${{ jobs.basic-checks.outputs.conflicts-status }}
       conflicts-summary:
         description: "The summary of the merge conflicts check."
-        value: ${{ jobs.check-conflicts.outputs.summary }}
+        value: ${{ jobs.basic-checks.outputs.conflicts-summary }}
 
 permissions:
   contents: read
   pull-requests: write
   issues: write
 
-env:
-  TYPES: "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|hotfix"
-  MAX_LENGTH: 75
-
-jobs:
-  check-commits:
-    name: 'Check Commit Messages'
+jobs:  # yamllint disable-line rule:line-length
+  basic-checks:
+    name: "Basic Code Quality Checks"
     runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
-      report: ${{ steps.check.outputs.report }}
-    steps:
-      - name: Checkout Caller Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.head_ref }}
-
-      - name: Check Commit Messages Format
-        id: check
-        env:
-          TYPES: ${{ env.TYPES }}
-          MAX_LENGTH: ${{ env.MAX_LENGTH }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: .github/scripts/check-commit-messages.sh
-
-  check-conflicts:
-    name: 'Check Merge Conflicts'
-    runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
+    outputs:  # yamllint disable rule:line-length
+      pr-title-status: ${{ steps.basic-checks.outputs.pr-title-status }}
+      pr-title-summary: ${{ steps.basic-checks.outputs.pr-title-summary }}
+      branch-name-status: ${{ steps.basic-checks.outputs.branch-name-status }}
+      branch-name-summary: ${{ steps.basic-checks.outputs.branch-name-summary }}
+      commit-messages-status: ${{ steps.basic-checks.outputs.commit-messages-status }}
+      commit-messages-summary: ${{ steps.basic-checks.outputs.commit-messages-summary }}
+      commit-messages-report: ${{ steps.basic-checks.outputs.commit-messages-report }}
+      conflicts-status: ${{ steps.basic-checks.outputs.conflicts-status }}
+      conflicts-summary: ${{ steps.basic-checks.outputs.conflicts-summary }}
+    # yamllint enable rule:line-length
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Run Basic Code Quality Checks
+        id: basic-checks
+        uses: ./.github/actions/basic-checks
         with:
-          ref: ${{ github.head_ref }}
-
-      - name: Check for conflict markers
-        id: check
-        run: .github/scripts/check-conflicts.sh
-
-  check-pr-title:
-    name: 'Check PR Title'
-    runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
-    steps:
-      - name: Check PR Title Format
-        id: check
-        env:
-          TYPES: ${{ env.TYPES }}
-          MAX_LENGTH: ${{ env.MAX_LENGTH }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: .github/scripts/check-pr-title.sh
-
-  check-branch-name:
-    name: 'Check Branch Name'
-    runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
-    steps:
-      - name: Check Branch Name Format
-        id: check
-        env:
-          TYPES: ${{ env.TYPES }}
-          BRANCH_NAME: ${{ github.head_ref }}
-        run: .github/scripts/check-branch-name.sh
+          pr-title: ${{ github.event.pull_request.title }}
+          branch-name: ${{ github.head_ref }}
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}

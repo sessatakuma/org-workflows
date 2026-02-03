@@ -1,118 +1,166 @@
 # Sessatakuma Quality Checking Workflows
-This is a repository with our shared workflows.
 
+此儲存庫提供 Sessatakuma 組織共用的 GitHub Actions 工作流程。透過集中管理的「品質閘門 (Quality Gate)」，確保所有專案的程式碼品質與風格一致。
 
-## Arguments
-To use this to check code before PR, please refer to [sample caller](.github/workflows/main.yml).
+## 🚀 快速開始 (Quick Start)
 
-To apply workflows, please set the following arguments in `with` section:
+要在您的儲存庫中使用這些檢查，請建立 `.github/workflows/quality-checks.yml` 檔案並貼上以下內容：
 
-| Input | Description | Type | Default |
+```yaml
+---
+name: Quality Checks
+on:  # yamllint disable-line rule:truthy
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  quality-gate:
+    # 呼叫組織共用的 entrypoint
+    uses: sessatakuma/org-workflows/.github/workflows/entrypoint.yml@main
+    secrets:
+      CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      # 根據您的專案需求開啟對應檢查
+      run-basic-checks: true    # 檢查 PR 標題、分支名稱
+      run-python-checks: true   # Python 專案 (Ruff, Mypy)
+      run-frontend-checks: false # 前端專案 (ESLint, Prettier)
+      run-go-checks: false      # Go 專案
+      run-config-checks: true   # 設定檔檢查 (YAML, JSON)
+```
+
+就是這樣！您的 PR 現在會自動執行這些檢查並在留言中回報結果。
+
+---
+
+## ⚙️ 參數設定 (Configuration)
+
+### 1. 輸入參數 (Inputs)
+
+您可以透過 `with` 區塊調整檢查行為：
+
+| 參數 (Input) | 類型 | 說明 | 預設值 |
 | :--- | :--- | :--- | :--- |
-| `run-basic-checks` | Whether to run the basic PR quality checks. | `boolean` | `true` |
-| `run-python-checks` | Whether to run the Python code quality checks. | `boolean` | `false` |
-| `python-version` | The Python version to use for the Python checks. | `string` | `'3.11'` |
-| `run-config-checks` | Whether to run the configuration files quality checks. | `boolean` | `false` |
-| `run-frontend-checks` | Whether to run the frontend code quality checks. | `boolean` | `false` |
-| `run-go-checks` | Whether to run the Golang code quality checks. | `boolean` | `false` |
-| `go-version` | The Go version to use. | `string` | `'stable'` |
-| `go-working-directory` | Working directory for Go checks. | `string` | `'.'` |
+| `run-basic-checks` | `boolean` | 檢查 PR 標題、分支命名、Commit 訊息格式與衝突。 | `true` |
+| `run-python-checks` | `boolean` | 是否執行 Python 品質檢查 (Ruff, Mypy)。 | `false` |
+| `python-version` | `string` | 使用的 Python 版本。 | `'3.11'` |
+| `run-frontend-checks` | `boolean` | 是否執行前端品質檢查 (Prettier, ESLint)。 | `false` |
+| `run-go-checks` | `boolean` | 是否執行 Go 品質檢查 (Lint, Test, Build)。 | `false` |
+| `go-version` | `string` | 使用的 Go 版本 (例如 `1.21` 或 `stable`)。 | `'stable'` |
+| `go-working-directory` | `string` | Go 專案的工作目錄 (若不在根目錄時使用)。 | `'.'` |
+| `run-config-checks` | `boolean` | 是否驗證 YAML, JSON, TOML 檔案語法。 | `false` |
 
-## Checking details
-### Basic PR Quality Checks
-This checker will validate:
-1. **PR Title Validation**
-   - Checks for conventional commit format (e.g., `feat:`, `fix:`, `docs:`)
-   - Validates title length (typically 50-72 characters)
-   - Ensures proper capitalization and formatting
-   - Generates clear feedback for non-compliant titles
-2. **Branch Name Validation**
-   - Enforces type-based naming conventions (e.g., `feature/`, `bugfix/`, `hotfix/`)
-   - Validates branch name format and structure
-   - Provides suggestions for proper naming patterns
-3. **Commit Message Analysis**
-   - Analyzes all commit messages in the PR
-   - Validates conventional commit format for each commit
-   - Checks message length and capitalization rules
-   - Provides detailed reports with specific line-by-line feedback
-4. **Merge Conflict Detection**
-   - Scans all files for unresolved merge conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
-   - Creates annotations pointing to specific conflict locations
-   - Prevents accidental merging of conflicted code
+### 2. 機密資訊 (Secrets)
 
-**Note:** Basic checks provide comprehensive feedback through PR comments and status checks.
+| 名稱 (Secret) | 是否必填 | 說明 |
+| :--- | :--- | :--- |
+| `CHECKER_TOKEN` | **是** | 請傳入 `${{ secrets.GITHUB_TOKEN }}` 以供機器人發表 PR 留言。 |
 
-### Python Code Quality Checks
-This checker will validate:
-1. **Ruff Code Formatting Check**
-   - Runs `ruff format . --check --output-format=github` to verify code formatting
-   - Automatically generates GitHub annotations for formatting violations
-   - Uses Ruff's fast Python formatter for consistent code style
-   - Provides clear indication of files that need formatting fixes
-2. **Ruff Linting Analysis**
-   - Executes `ruff check . --output-format=github` for comprehensive linting
-   - Catches common Python errors, style issues, and code smells
-   - Generates GitHub annotations with file, line, and column information
-   - Includes rule codes (e.g., F401, E501) for easy reference and configuration
-3. **Mypy Type Checking**
-   - Runs `mypy .` to validate type hints and catch type-related errors
-   - Parses mypy output format: `file.py:line:column: error_type: message`
-   - Generates GitHub annotations with proper error/warning/notice levels
-   - Creates detailed annotations with file locations and error descriptions
-   - Distinguishes between errors, warnings, and informational notes
+---
 
-**Note:** Python checks create comprehensive inline annotations on your PR with precise file locations, making it easy to identify and fix issues directly from the GitHub interface.
+## 🔍 檢查項目詳情
 
-### Go Code Quality Checks
-This checker will validate:
-1. **Go Mod Tidy Check**
-   - Verifies that `go.mod` and `go.sum` are in sync
-   - Detects missing or unused dependencies
-   - Ensures reproducible builds
-2. **golangci-lint Analysis**
-   - Runs comprehensive static analysis with multiple linters
-   - Generates GitHub annotations for code issues
-   - Checks for common Go anti-patterns and bugs
-3. **Go Test with Race Detector**
-   - Executes all tests with `-race` flag enabled
-   - Detects data races in concurrent code
-   - Reports test failures with detailed output
-4. **Build Verification**
-   - Verifies that all packages compile successfully
-   - Catches syntax errors and type mismatches
-   - Ensures the codebase is in a buildable state
+### 1. Basic Checks (基本檢查)
+*   **PR Title**: 必須符合 Conventional Commits (例如 `feat: add new login page`)。
+*   **Branch Name**: 必須包含類別前綴 (例如 `feature/`, `bugfix/`, `hotfix/`)。
+*   **Merge Conflicts**: 檢查是否包含未解決的衝突標記 (`<<<<<<<`)。
 
-**Note:** Go checks create inline annotations on your PR for linting issues, making it easy to identify and fix problems directly from the GitHub interface.
+### 2. Python Checks
+*   使用 `uv` 與 `ruff` 進行極速 Linting 與 Formatting。
+*   使用 `mypy` 進行靜態型別檢查。
+*   *Feature*: 若您的專案沒有 `pyproject.toml`，會自動注入預設配置。
 
-### Configuration Files Quality Checks
-This checker will validate:
-1. **YAML File Validation (yamllint)**
-   - Runs `yamllint` to check YAML syntax and style compliance
-   - Validates indentation, line length, and YAML structure
-   - Generates GitHub annotations for syntax errors and style violations
-   - Checks for common YAML pitfalls like incorrect boolean values and quotes
-2. **JSON File Validation (jq)**
-   - Uses `jq` to parse and validate JSON file syntax
-   - Detects malformed JSON, missing brackets, and trailing commas
-   - Creates annotations pointing to specific syntax error locations
-   - Ensures JSON files are properly formatted and parseable
-3. **TOML File Validation (taplo-cli)**
-   - Executes `taplo-cli check` for TOML syntax and formatting validation
-   - Validates TOML structure, key-value pairs, and data types
-   - Generates annotations for syntax errors and formatting issues
-   - Ensures TOML files follow proper formatting standards
+### 3. Frontend Checks
+*   **Prettier**: 程式碼格式化。
+*   **ESLint**: JavaScript/TypeScript 語法檢查。
+*   *Feature*: 支援自動注入預設的 `.prettierrc` 與 `eslint.config.mjs`。
 
-**Note:** Configuration file checks create precise inline annotations for syntax errors, with clear error messages and exact file locations for quick resolution.
+### 4. Go Checks
+*   **Go Mod**: 檢查 `go.mod` 與 `go.sum` 是否同步。
+*   **GolangCI-Lint**: 靜態分析。
+*   **Race Detector**: 使用 `-race` 執行測試。
 
-### Frontend Code Quality Checks
-This checker will validate:
-1. **Prettier Formatting Check**
-   - Runs prettier to verify code formatting
-   - Generates GitHub annotations for files that need formatting
-   - Provides helpful error messages with fix instructions
-2. **ESLint Linting Check**
-   - Runs ESLint with JSON output format
-   - Parses the JSON results using Node.js
-   - Creates proper GitHub annotations with file, line, column info
-   - Distinguishes between errors and warnings
-   - Includes rule IDs in annotation titles
+---
+
+## 🔧 新增或修改工作流程 (Adding or Modifying Workflows)
+
+如果您想要新增或修改檢查工作流程，請參考 **[如何新增工作流程 (How to Add Workflows)](./HOW_TO_ADD_WORKFLOWS.md)** 設計指南，了解完整的架構設計、實作步驟與命名慣例。
+
+---
+
+## 🏗️ 架構概覽 (Architecture Overview)
+
+本專案採用分層架構設計，以確保靈活性與可維護性：
+
+```mermaid
+graph TD
+    UserWorkflow[User Workflow] --> Entrypoint[entrypoint.yml]
+    
+    Entrypoint --> R_Basic[reusables-basic.yml] --> A_Basic[basic-checks]
+    A_Basic --> S_Basic[scripts/*.sh]
+    
+    Entrypoint --> R_Python[reusables-python.yml] --> A_Python[python-checks]
+    A_Python --> S_Python[scripts/*.sh]
+    
+    Entrypoint --> R_Config[reusables-config.yml] --> A_Config[config-checks]
+    A_Config --> S_Config[scripts/*.sh]
+    
+    Entrypoint --> R_Frontend[reusables-frontend.yml] --> A_Frontend[frontend-checks]
+    A_Frontend --> S_Frontend[scripts/*.sh]
+    
+    Entrypoint --> R_Go[reusables-go.yml] --> A_Go[go-checks]
+    A_Go --> S_Go[Inline Bash / Go Tools]
+```
+
+### 🔄 資料流向 (Data Flow)
+
+以下時序圖展示了參數如何向下傳遞成為環境變數，以及執行結果如何向上回報：
+
+```mermaid
+sequenceDiagram
+    participant User as User Repo
+    participant Entry as Entrypoint
+    participant Reusable as Reusable Workflow
+    participant Action as Composite Action
+    participant Script as Shell Scripts
+
+    User->>Entry: with: run-basic-checks: true
+    Entry->>Reusable: with: python-version: "3.11"
+    Reusable->>Action: inputs: python-version
+    
+    Action->>Script: env: PYTHON_VERSION
+    
+    activate Script
+    Script->>Script: Validate & Execute
+    Script-->>Action: echo "status=success" >> $GITHUB_OUTPUT
+    deactivate Script
+
+    Action-->>Reusable: outputs: python-status
+    Reusable-->>Entry: outputs: python-status
+    
+    Entry->>Entry: Aggregate all outputs
+    Entry->>User: Post PR Comment
+```
+
+---
+
+## 💻 本地模擬測試 (Local Testing)
+
+在將程式碼推送到 GitHub 之前，您可以使用 [act](https://github.com/nektos/act) 在本機電腦上模擬執行這些檢查。這能幫助您快速修復錯誤，無需等待 CI 排隊。
+
+**先決條件**：需安裝 Docker, `act` 與 `yamllint`。
+
+```bash
+# 1. 驗證 YAML 語法 (強烈建議)
+yamllint .github/
+
+# 2. 在您的專案根目錄列出可用的 Actions
+act pull_request --list
+
+# 3. 模擬執行 Pull Request 事件 (執行所有檢查)
+act pull_request
+
+# 4. Dry run (檢查流程結構但不實際執行)
+act pull_request -n
+```
+
+> **注意**：由於 `act` 是模擬環境，某些 GitHub 特有功能（如 OIDC 或快取）可能無法完全運作，但對於驗證程式碼品質檢查通常已足夠。

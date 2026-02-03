@@ -10,22 +10,22 @@ on:  # yamllint disable-line rule:truthy
     outputs:
       yaml-status:
         description: "The status of the YAML validation."
-        value: ${{ jobs.check-yaml.outputs.status }}
+        value: ${{ jobs.config-checks.outputs.yaml-status }}
       yaml-summary:
         description: "The summary of the YAML validation."
-        value: ${{ jobs.check-yaml.outputs.summary }}
+        value: ${{ jobs.config-checks.outputs.yaml-summary }}
       json-status:
         description: "The status of the JSON validation."
-        value: ${{ jobs.check-json.outputs.status }}
+        value: ${{ jobs.config-checks.outputs.json-status }}
       json-summary:
         description: "The summary of the JSON validation."
-        value: ${{ jobs.check-json.outputs.summary }}
+        value: ${{ jobs.config-checks.outputs.json-summary }}
       toml-status:
         description: "The status of the TOML validation."
-        value: ${{ jobs.check-toml.outputs.status }}
+        value: ${{ jobs.config-checks.outputs.toml-status }}
       toml-summary:
         description: "The summary of the TOML validation."
-        value: ${{ jobs.check-toml.outputs.summary }}
+        value: ${{ jobs.config-checks.outputs.toml-summary }}
 
 permissions:
   contents: read
@@ -33,73 +33,20 @@ permissions:
   issues: write
 
 jobs:
-  check-yaml:
-    name: 'Check YAML Files'
+  config-checks:
+    name: 'Configuration Files Quality Checks'
     runs-on: ubuntu-latest
     outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
+      yaml-status: ${{ steps.config-checks.outputs.yaml-status }}
+      yaml-summary: ${{ steps.config-checks.outputs.yaml-summary }}
+      json-status: ${{ steps.config-checks.outputs.json-status }}
+      json-summary: ${{ steps.config-checks.outputs.json-summary }}
+      toml-status: ${{ steps.config-checks.outputs.toml-status }}
+      toml-summary: ${{ steps.config-checks.outputs.toml-summary }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
 
-      - name: Install uv
-        id: setup_uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-      - name: Add uv to PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install yamllint
-        run: |
-          uv tool install yamllint
-
-      - name: Find and Check YAML Files
-        id: check
-        run: .github/scripts/check-yaml-files.sh
-
-  check-json:
-    name: 'Check JSON Files'
-    runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Install jq
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y jq
-
-      - name: Find and Check JSON Files
-        id: check
-        run: .github/scripts/check-json-files.sh
-
-  check-toml:
-    name: 'Check TOML Files'
-    runs-on: ubuntu-latest
-    outputs:
-      status: ${{ steps.check.outputs.status }}
-      summary: ${{ steps.check.outputs.summary }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Install taplo-cli
-        run: |
-          # Install taplo
-          BASE_URL="https://github.com/tamasfe/taplo/releases/latest/download"
-          curl -fsSL "${BASE_URL}/taplo-full-linux-x86_64.gz" \
-            | gzip -d - | install -m 755 /dev/stdin /usr/local/bin/taplo
-
-      - name: Find and Check TOML Files
-        id: check
-        run: .github/scripts/check-toml-files.sh
+      - name: Run Config Checks
+        id: config-checks
+        uses: ./.github/actions/config-checks

@@ -272,27 +272,31 @@ jobs:
 
             // --- Update or Create Comment ---
             try {
+              // 1. 獲取留言 (增加 per_page 避免被舊留言淹沒)
               const comments = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
+                per_page: 100
               });
-              const botComment = comments.data.find(comment =>
+
+              // 2. 找出所有舊的 Bot 留言 (使用 filter 而非 find)
+              const botComments = comments.data.filter(comment =>
                 comment.user.type === 'Bot' &&
                 comment.body.includes('🛡️ PR Quality Check Summary')
               );
 
-              // 1. 如果找到舊留言，就刪除它
-              if (botComment) {
+              // 3. 刪除所有找到的舊留言
+              for (const comment of botComments) {
                 await github.rest.issues.deleteComment({
-                  comment_id: botComment.id,
+                  comment_id: comment.id,
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                 });
-                console.log(`✅ Deleted existing comment #${botComment.id}`);
+                console.log(`✅ Deleted existing comment #${comment.id}`);
               }
 
-              // 2. 無論如何，都在最底下建立一則新留言
+              // 4. 建立新留言
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,

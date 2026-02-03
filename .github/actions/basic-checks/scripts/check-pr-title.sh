@@ -2,6 +2,9 @@
 # Check PR Title Format
 # Validates PR title with cascading checks: length, format, lowercase
 
+# Force standard locale
+export LC_ALL=C
+
 # Script reads from environment variables:
 # - TYPES: Valid commit type prefixes
 # - MAX_LENGTH: Maximum title length
@@ -18,14 +21,15 @@ fi
 
 # 2. Format Check (only if length check passed)
 if [ "$STATUS" == "success" ]; then
-	REGEX="^($TYPES)(\(.+\))?:\s.+"
+	# Use [[:space:]] for POSIX compatibility
+	REGEX="^($TYPES)(\(.+\))?(!?):[[:space:]].+"
 	if [[ ! "$PR_TITLE" =~ $REGEX ]]; then
 		STATUS="failure"
 		if [[ ! "$PR_TITLE" =~ : ]]; then
 			ERROR_DETAIL="Missing ':' separator"
 		elif [[ ! "$PR_TITLE" =~ ^($TYPES) ]]; then
 			ERROR_DETAIL="Invalid or missing type prefix (must be one of: $TYPES)"
-		elif [[ "$PR_TITLE" =~ ^($TYPES)(\(.+\))?:[[:space:]]*$ ]]; then
+		elif [[ "$PR_TITLE" =~ ^($TYPES)(\(.+\))?(!?)?:[[:space:]]*$ ]]; then
 			ERROR_DETAIL="Missing description after ':'"
 		else
 			ERROR_DETAIL="Invalid format"
@@ -36,11 +40,22 @@ fi
 
 # 3. Lowercase Description Check (only if previous checks passed)
 if [ "$STATUS" == "success" ]; then
-	DESC=$(echo "$PR_TITLE" | sed -E "s/^($TYPES)(\(.+\))?:\s+//")
-	if [[ ! "$DESC" =~ ^[a-z] ]]; then
-		STATUS="failure"
-		MESSAGE="❌ **PR Title:** Description must start with a lowercase letter. Current: \`$PR_TITLE\`"
-	fi
+    # 使用與 Step 2 相同的 Regex，但在最後加上 (.+) 來捕獲描述
+    # Group 1: Types, Group 2: Scope, Group 3: Bang, Group 4: Description
+    CAPTURE_REGEX="^($TYPES)(\(.+\))?(!?)?:[[:space:]]+(.+)"
+
+    if [[ "$PR_TITLE" =~ $CAPTURE_REGEX ]]; then
+        DESC="${BASH_REMATCH[4]}"
+
+        if [[ ! "$DESC" =~ ^[a-z] ]]; then
+            STATUS="failure"
+            MESSAGE="❌ **PR Title:** Description must start with a lowercase letter. Current: \`$PR_TITLE\`"
+        fi
+    else
+        # 理論上 Step 2 已攔截格式錯誤，這裡只是防禦性編程
+        STATUS="failure"
+        MESSAGE="❌ **PR Title:** Could not parse description from title."
+    fi
 fi
 
 # Set final success message if no failure occurred
@@ -48,14 +63,11 @@ if [ "$STATUS" == "success" ]; then
 	MESSAGE="✅ **PR Title:** Passed (Length: $TITLE_LENGTH/$MAX_LENGTH, Format: OK). \`$PR_TITLE\`"
 fi
 
-# Write outputs for the workflow
 {
 	echo "status=$STATUS"
 	echo "summary=$MESSAGE"
 } >>"$GITHUB_OUTPUT"
 
-# If the check failed, exit with 0 to prevent the script from stopping the workflow.
-# The orchestrator will handle the overall failure.
 if [ "$STATUS" == "failure" ]; then
 	exit 0
 fi
