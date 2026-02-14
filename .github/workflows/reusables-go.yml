@@ -9,6 +9,11 @@ on: # yamllint disable-line rule:truthy
         required: false
         type: string
         default: "stable"
+      golangci-lint-version:
+        description: "The golangci-lint version to use"
+        required: false
+        type: string
+        default: "latest"
       working-directory:
         description: "Directory where Go code is located"
         required: false
@@ -47,5 +52,6 @@ jobs:
         uses: sessatakuma/org-workflows/.github/actions/go-checks@main
         with:
           go-version: ${{ inputs.go-version }}
+          golangci-lint-version: ${{ inputs.golangci-lint-version }}
           working-directory: ${{ inputs.working-directory }}
           token: ${{ secrets.CHECKER_TOKEN }}

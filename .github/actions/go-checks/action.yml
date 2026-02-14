@@ -1,17 +1,21 @@
 ---
-name: 'Go Code Quality Checks'
-description: 'Runs Go code quality checks (formatting, linting, testing).'
+name: "Go Code Quality Checks"
+description: "Runs Go code quality checks (formatting, linting, testing)."
 inputs:
   go-version:
-    description: 'The Go version to use.'
+    description: "The Go version to use."
     required: false
-    default: 'stable'
+    default: "stable"
+  golangci-lint-version:
+    description: "The golangci-lint version to use."
+    required: false
+    default: "latest"
   working-directory:
-    description: 'Directory where Go code is located.'
+    description: "Directory where Go code is located."
     required: false
-    default: '.'
+    default: "."
   token:
-    description: 'GITHUB_TOKEN for API operations (reporting).'
+    description: "GITHUB_TOKEN for API operations (reporting)."
     required: true
 outputs:
   go-status:
@@ -79,7 +83,8 @@ runs:
       uses: golangci/golangci-lint-action@v6
       continue-on-error: true
       with:
-        version: latest
+        version: ${{ inputs.golangci-lint-version }}
+        install-mode: goinstall
         working-directory: ${{ inputs.working-directory }}
         args: --timeout=5m
 
