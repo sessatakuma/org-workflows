@@ -7,25 +7,46 @@
 要在您的儲存庫中使用這些檢查，請建立 `.github/workflows/quality-checks.yml` 檔案並貼上以下內容：
 
 ```yaml
----
-name: Quality Checks
+name: PR Quality Checks
+
 on:  # yamllint disable-line rule:truthy
   pull_request:
+    branches: ['main']
     types: [opened, synchronize, reopened, edited]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
 jobs:
-  quality-gate:
-    # 呼叫組織共用的 entrypoint
+  quality-checks:
+    name: Run Organization Quality Checks
     uses: sessatakuma/org-workflows/.github/workflows/entrypoint.yml@main
     secrets:
       CHECKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
-      # 根據您的專案需求開啟對應檢查
-      run-basic-checks: true    # 檢查 PR 標題、分支名稱
-      run-python-checks: true   # Python 專案 (Ruff, Mypy)
-      run-frontend-checks: false # 前端專案 (ESLint, Prettier)
-      run-go-checks: false      # Go 專案
-      run-config-checks: true   # 設定檔檢查 (YAML, JSON)
+      # Basic PR Quality Checks (enabled by default)
+      run-basic-checks: true
+
+      # Python Code Quality Checks (optional)
+      # Requires: pyproject.toml with ruff and mypy configured
+      run-python-checks: false
+      python-version: '3.11'
+
+      # Configuration Files Quality Checks (optional)
+      # Checks YAML, JSON, and TOML files for syntax errors
+      run-config-checks: true
+
+      # Frontend Code Quality Checks (optional)
+      # Requires: Node.js project with Prettier configured
+      run-frontend-checks: false
+      
+      # Go Code Quality Checks (optional)
+      # Requires: Go project with go.mod file (golangci-lint config optional)
+      # Checks: go mod tidy, golangci-lint, tests (race detector), build
+      run-go-checks: false
 ```
 
 就是這樣！您的 PR 現在會自動執行這些檢查並在留言中回報結果。
