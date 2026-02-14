@@ -1,0 +1,65 @@
+---
+name: "Config-Checks"
+description: "Composite action to validate YAML, JSON, and TOML config files"
+
+outputs:
+  yaml-status:
+    description: "Status of YAML validation (success/failure)"
+    value: ${{ steps.yaml-check.outputs.status }}
+  yaml-summary:
+    description: "Summary message of YAML validation"
+    value: ${{ steps.yaml-check.outputs.summary }}
+  json-status:
+    description: "Status of JSON validation (success/failure)"
+    value: ${{ steps.json-check.outputs.status }}
+  json-summary:
+    description: "Summary message of JSON validation"
+    value: ${{ steps.json-check.outputs.summary }}
+  toml-status:
+    description: "Status of TOML validation (success/failure)"
+    value: ${{ steps.toml-check.outputs.status }}
+  toml-summary:
+    description: "Summary message of TOML validation"
+    value: ${{ steps.toml-check.outputs.summary }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Install yamllint"
+      shell: bash
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: "Install yamllint via uv"
+      shell: bash
+      run: |
+        uv tool install yamllint
+
+    - name: "Install jq"
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y jq
+
+    - name: "Install taplo-cli"
+      shell: bash
+      run: |
+        BASE_URL="https://github.com/tamasfe/taplo/releases/latest/download"
+        curl -fsSL "${BASE_URL}/taplo-linux-x86_64.gz" \
+          | gzip -d - | install -m 755 /dev/stdin /usr/local/bin/taplo
+
+    - name: "Check YAML files"
+      id: yaml-check
+      shell: bash
+      run: ${{ github.action_path }}/scripts/check-yaml-files.sh
+
+    - name: "Check JSON files"
+      id: json-check
+      shell: bash
+      run: ${{ github.action_path }}/scripts/check-json-files.sh
+
+    - name: "Check TOML files"
+      id: toml-check
+      shell: bash
+      run: ${{ github.action_path }}/scripts/check-toml-files.sh
