@@ -47,6 +47,8 @@ jobs:
       # Requires: Go project with go.mod file (golangci-lint config optional)
       # Checks: go mod tidy, golangci-lint, tests (race detector), build
       run-go-checks: false
+      go-version: 'stable'
+      golangci-lint-version: 'latest'
 ```
 
 就是這樣！您的 PR 現在會自動執行這些檢查並在留言中回報結果。
@@ -67,6 +69,7 @@ jobs:
 | `run-frontend-checks` | `boolean` | 是否執行前端品質檢查 (Prettier, ESLint)。 | `false` |
 | `run-go-checks` | `boolean` | 是否執行 Go 品質檢查 (Lint, Test, Build)。 | `false` |
 | `go-version` | `string` | 使用的 Go 版本 (例如 `1.21` 或 `stable`)。 | `'stable'` |
+| `golangci-lint-version` | `string` | 使用的 golangci-lint 版本。 | `'latest'` |
 | `go-working-directory` | `string` | Go 專案的工作目錄 (若不在根目錄時使用)。 | `'.'` |
 | `run-config-checks` | `boolean` | 是否驗證 YAML, JSON, TOML 檔案語法。 | `false` |
 
