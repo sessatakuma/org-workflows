@@ -1,7 +1,7 @@
 ---
 name: "Python Code Quality Checks"
 
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   workflow_call:
     inputs:
       python-version:
@@ -39,6 +39,6 @@ jobs:
 
       - name: Run Python Checks
         id: run-checks
-        uses: ./.github/actions/python-checks
+        uses: sessatakuma/org-workflows/.github/actions/python-checks@main
         with:
           python-version: ${{ inputs.python-version }}

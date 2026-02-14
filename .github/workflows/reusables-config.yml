@@ -1,11 +1,11 @@
 ---
-name: 'Configuration Files Quality Checks'
+name: "Configuration Files Quality Checks"
 
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   workflow_call:
     secrets:
       CHECKER_TOKEN:
-        description: 'The GITHUB_TOKEN passed from the caller'
+        description: "The GITHUB_TOKEN passed from the caller"
         required: true
     outputs:
       yaml-status:
@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   config-checks:
-    name: 'Configuration Files Quality Checks'
+    name: "Configuration Files Quality Checks"
     runs-on: ubuntu-latest
     outputs:
       yaml-status: ${{ steps.config-checks.outputs.yaml-status }}
@@ -49,4 +49,4 @@ jobs:
 
       - name: Run Config Checks
         id: config-checks
-        uses: ./.github/actions/config-checks
+        uses: sessatakuma/org-workflows/.github/actions/config-checks@main
