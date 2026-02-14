@@ -1,17 +1,17 @@
 ---
-name: 'Go Code Quality Checks'
-description: 'Runs Go code quality checks (formatting, linting, testing).'
+name: "Go Code Quality Checks"
+description: "Runs Go code quality checks (formatting, linting, testing)."
 inputs:
   go-version:
-    description: 'The Go version to use.'
+    description: "The Go version to use."
     required: false
-    default: 'stable'
+    default: "stable"
   working-directory:
-    description: 'Directory where Go code is located.'
+    description: "Directory where Go code is located."
     required: false
-    default: '.'
+    default: "."
   token:
-    description: 'GITHUB_TOKEN for API operations (reporting).'
+    description: "GITHUB_TOKEN for API operations (reporting)."
     required: true
 outputs:
   go-status:
@@ -76,7 +76,7 @@ runs:
 
     - name: Run golangci-lint
       id: lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v9
       continue-on-error: true
       with:
         version: latest
