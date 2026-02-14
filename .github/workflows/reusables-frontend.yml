@@ -1,17 +1,17 @@
 ---
-name: 'Frontend Code Quality Checks'
+name: "Frontend Code Quality Checks"
 
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   workflow_call:
     inputs:
       node-version:
-        description: 'The Node.js version to use'
+        description: "The Node.js version to use"
         required: false
         type: string
-        default: '20'
+        default: "20"
     secrets:
       CHECKER_TOKEN:
-        description: 'The GITHUB_TOKEN passed from the caller'
+        description: "The GITHUB_TOKEN passed from the caller"
         required: true
     outputs:
       prettier-status:
@@ -81,10 +81,9 @@ env:
         }
     ];
 
-
 jobs:
   frontend-checks:
-    name: 'Frontend Code Quality Checks'
+    name: "Frontend Code Quality Checks"
     runs-on: ubuntu-latest
     # yamllint disable rule:line-length
     outputs:
@@ -96,6 +95,6 @@ jobs:
     steps:
       - name: Run Frontend Checks
         id: frontend-checks
-        uses: ./.github/actions/frontend-checks
+        uses: sessatakuma/org-workflows/.github/actions/frontend-checks@main
         with:
           node-version: ${{ inputs.node-version }}

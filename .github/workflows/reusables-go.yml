@@ -1,7 +1,7 @@
 ---
 name: "Reusable Go Checks"
 
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   workflow_call:
     inputs:
       go-version:
@@ -44,7 +44,7 @@ jobs:
 
       - name: Run Go Checks
         id: run-checks
-        uses: ./.github/actions/go-checks
+        uses: sessatakuma/org-workflows/.github/actions/go-checks@main
         with:
           go-version: ${{ inputs.go-version }}
           working-directory: ${{ inputs.working-directory }}

@@ -1,7 +1,7 @@
 ---
 name: "Basic Code Quality Checks"
 
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   workflow_call:
     secrets:
       CHECKER_TOKEN:
@@ -41,11 +41,11 @@ permissions:
   pull-requests: write
   issues: write
 
-jobs:  # yamllint disable-line rule:line-length
+jobs: # yamllint disable-line rule:line-length
   basic-checks:
     name: "Basic Code Quality Checks"
     runs-on: ubuntu-latest
-    outputs:  # yamllint disable rule:line-length
+    outputs: # yamllint disable rule:line-length
       pr-title-status: ${{ steps.basic-checks.outputs.pr-title-status }}
       pr-title-summary: ${{ steps.basic-checks.outputs.pr-title-summary }}
       branch-name-status: ${{ steps.basic-checks.outputs.branch-name-status }}
@@ -62,7 +62,7 @@ jobs:  # yamllint disable-line rule:line-length
 
       - name: Run Basic Code Quality Checks
         id: basic-checks
-        uses: ./.github/actions/basic-checks
+        uses: sessatakuma/org-workflows/.github/actions/basic-checks@main
         with:
           pr-title: ${{ github.event.pull_request.title }}
           branch-name: ${{ github.head_ref }}
