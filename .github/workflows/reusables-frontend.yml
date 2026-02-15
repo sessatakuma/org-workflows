@@ -93,6 +93,9 @@ jobs:
       eslint-summary: ${{ steps.frontend-checks.outputs.eslint-summary }}
     # yamllint enable
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Run Frontend Checks
         id: frontend-checks
         uses: sessatakuma/org-workflows/.github/actions/frontend-checks@main
