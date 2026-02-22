@@ -8,8 +8,7 @@ inputs:
   types:
     description: "Valid commit type prefixes (pipe-separated)"
     required: false
-    default: >
-      build|chore|ci|docs|feat|fix|hotfix|perf|refactor|revert|style|test
+    default: build|chore|ci|docs|feat|fix|hotfix|perf|refactor|revert|style|test
   max-length:
     description: "Maximum allowed length for PR title and commit messages"
     required: false
